@@ -8,9 +8,8 @@ const {
   countFiberLinks,
   countOpticModules,
   resolveFormFactor,
-} = require('../../src/types/engine/devices/optics.js');
-
-const { createCtx, ValidationError } = require('../../src/types/engine/ctx.js');
+} = require('../../backend/src/types/engine/devices/optics.js');
+const { createCtx, ValidationError } = require('../../backend/src/types/engine/ctx.js');
 
 function makeSwitch(overrides = {}) {
   return {

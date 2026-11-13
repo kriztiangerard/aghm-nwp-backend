@@ -8,7 +8,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 // Adjust only this line if the test file moves.
-const ENGINE = '../../src/types/engine';
+const ENGINE = '../../backend/src/types/engine';
 
 const params = require(`${ENGINE}/params.js`);
 const { createCtx } = require(`${ENGINE}/ctx.js`);

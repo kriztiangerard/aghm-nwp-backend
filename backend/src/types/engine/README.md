@@ -1,7 +1,7 @@
 # Recommendation engine (Lambda: Engine / BOM)
 
 This folder contains the Engine Lambda entrypoint at `backend/src/types/engine/lambda-handler.js`. CDK bundles that entrypoint with handler `lambda-handler.handler`.
-Tests and fixtures live outside it, in `backend/tests/`, so they are not zipped.
+Tests and fixtures live outside it, in the repository's `tests/` directory, so they are not zipped.
 
 The handler accepts the frontend NetworkConfiguration (or legacy Q-numbered raw answers), normalizes it, derives requirements, loads vendor descriptors and canonical CatalogSku JSON from PostgreSQL, runs the vendor/plan orchestration, then timestamps and validates the result.
 

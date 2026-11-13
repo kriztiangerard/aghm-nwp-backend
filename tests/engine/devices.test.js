@@ -5,10 +5,10 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const { deriveDeviceRequirements } =
-  require('../../src/types/engine/requirements/devices.js');
+  require('../../backend/src/types/engine/requirements/devices.js');
 
 const { createCtx } =
-  require('../../src/types/engine/ctx.js');
+  require('../../backend/src/types/engine/ctx.js');
 
 function makeInput(overrides = {}) {
   return {

@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 
 const {
   computePoeBudget,
-} = require('../../src/types/engine/devices/poe');
+} = require('../../backend/src/types/engine/devices/poe');
 
 describe('NWP-ENGINE-010: PoE budget calculation', () => {
   const apSelection = {

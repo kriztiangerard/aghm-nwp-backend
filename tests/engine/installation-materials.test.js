@@ -6,9 +6,8 @@ const assert = require('node:assert/strict');
 const {
   assembleBom,
   buildInstallationMaterials,
-} = require('../../src/types/engine/bom');
-
-const config = require('../../src/types/engine/installation-materials.json');
+} = require('../../backend/src/types/engine/bom');
+const config = require('../../backend/src/types/engine/installation-materials.json');
 
 test('installation materials includes all four configured reference items', () => {
   const result = buildInstallationMaterials({ optics: null });

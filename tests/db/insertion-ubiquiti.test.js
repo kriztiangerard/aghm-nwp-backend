@@ -5,7 +5,7 @@
 //
 // !! The ingestion script was not provided. Everything marked ADAPTER below encodes an ASSUMPTION; edit that section to match the real script and schema. !!
 //
-// Run:  TEST_DATABASE_URL=postgres://user:pw@localhost:5432/nwp_test node --test tests/setup-007/
+// Run:  TEST_DATABASE_URL=postgres://user:pw@localhost:5432/nwp_test node --test tests/db/insertion-ubiquiti.test.js
 // Dev deps: npm i -D pg
 // The database MUST be a disposable test DB (name must contain "test"); the suite truncates Device and Capability.
 
@@ -19,7 +19,7 @@ const { Client } = require('pg');
 // ===================== ADAPTER (edit me) =====================
 // Assumption: the script is a module exporting ingest({ files, client }) that resolves to
 // { inserted, updated, skipped }, logs per-entry errors via console.error, and never throws for a bad entry.
-const INGEST_MODULE = process.env.INGEST_MODULE || path.resolve(__dirname, '../../scripts/ingest-catalog.js');
+const INGEST_MODULE = process.env.INGEST_MODULE || path.resolve(__dirname, '../../backend/scripts/ingest-catalog.js');
 async function runIngest(client, files) {
   const { ingest } = require(INGEST_MODULE);
   const errors = [];

@@ -15,7 +15,7 @@ const {
   validateRequirements,
   validateSelectionResult,
   validateCatalogSku,
-} = require('../src/types/engine/contracts');
+} = require('../backend/src/types/engine/contracts');
 
 // Passes only if fn throws a ValidationError for `field`, and the message names it too.
 function assertRejects(fn, field) {

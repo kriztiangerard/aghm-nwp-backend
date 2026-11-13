@@ -4,10 +4,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const rawAnswers = require('../fixtures/raw-answers/input1-baseline.json');
 const catalogSnapshot = require('../fixtures/catalogs/omada.snapshot.json');
-const { flatRowToCatalogSku } = require('../../src/types/engine/catalog-mapping');
-const { run } = require('../../src/types/engine');
-const { validateEngineResult } = require('../../src/types/engine/contracts');
-const { finalizeEngineResult } = require('../../src/types/engine/steps/assemble');
+const { flatRowToCatalogSku } = require('../../backend/src/types/engine/catalog-mapping');
+const { run } = require('../../backend/src/types/engine');
+const { validateEngineResult } = require('../../backend/src/types/engine/contracts');
+const { finalizeEngineResult } = require('../../backend/src/types/engine/steps/assemble');
 
 const engineData = {
   catalog: catalogSnapshot.skus.map((row) => flatRowToCatalogSku(row).sku),

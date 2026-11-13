@@ -3,8 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { selectDefaultVendors } = require('../../src/types/engine/default-vendor.js');
-const { createCtx } = require('../../src/types/engine/ctx.js');
+const { selectDefaultVendors } = require('../../backend/src/types/engine/default-vendor.js');
+const { createCtx } = require('../../backend/src/types/engine/ctx.js');
 
 const vendors = [
   { name: 'Vendor A', needController: false, managementModes: ['dashboard'] },
@@ -53,8 +53,8 @@ function runSelectorWithBudgetCaps(
   vendorList,
   budgetCaps
 ) {
-  const paramsPath = require.resolve('../../src/types/engine/params.js');
-  const selectorPath = require.resolve('../../src/types/engine/default-vendor.js');
+  const paramsPath = require.resolve('../../backend/src/types/engine/params.js');
+  const selectorPath = require.resolve('../../backend/src/types/engine/default-vendor.js');
 
   const originalParamsModule = require.cache[paramsPath];
   const originalSelectorModule = require.cache[selectorPath];

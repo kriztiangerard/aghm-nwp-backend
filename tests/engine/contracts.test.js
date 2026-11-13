@@ -10,7 +10,7 @@ const {
   validateBom,
   validatePlan,
   validateEngineResult,
-} = require('../../src/types/engine/contracts');
+} = require('../../backend/src/types/engine/contracts');
 
 function assertRejects(fn, field) {
   assert.throws(fn, (err) => {

@@ -2,8 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildBom } = require('../../src/types/engine/bom');
-const { ValidationError, validateBom } = require('../../src/types/engine/contracts');
+const { buildBom } = require('../../backend/src/types/engine/bom');
+const { ValidationError, validateBom } = require('../../backend/src/types/engine/contracts');
 
 function sku(overrides = {}) {
   return {

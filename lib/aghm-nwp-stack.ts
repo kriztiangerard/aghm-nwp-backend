@@ -1,7 +1,6 @@
 
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import * as amplify from 'aws-cdk-lib/aws-amplify';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
@@ -112,73 +111,18 @@ export class AghmNwpStack extends cdk.Stack {
     // pricingUpdateRule.addTarget(new targets.LambdaFunction(pricingUpdateLambda));
 
 
-    // 2. FRONTEND: Amplify Hosting
+    // 2. FRONTEND: Moved to its own repository; use console
+    // Token kept as reference in case needed.
 
     // .unsafeUnwrap() safely converts the CDK SecretValue object
     // into a plain string that CloudFormation can resolve during deployment.
-    const githubToken = cdk
+    /* const githubToken = cdk
       .SecretValue
       .secretsManager('github-oauth-token')
       .unsafeUnwrap();
-
-    // Amplify build configuration for the Vite React frontend.
-    const buildSpecYaml = `
-version: 1.0
-applications:
-  - appRoot: frontend
-    frontend:
-      phases:
-        preBuild:
-          commands:
-            - npm ci
-        build:
-          commands:
-            - npm run build
-      artifacts:
-        baseDirectory: dist
-        files:
-          - '**/*'
-`;
-
-    const amplifyApp = new amplify.CfnApp(this, 'MonorepoAmplifyApp', {
-      name: 'Capstone Project',
-      repository: 'https://github.com/kriztiangerard/aghm-nwp',
-      oauthToken: githubToken,
-      buildSpec: buildSpecYaml,
-      iamServiceRole: amplifyRole.roleArn,
-
-
-      // For fixing client-side routing
-      customRules: [
-        {
-          source:
-            '</^[^.]+$|\\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json)$)([^.]+$)/>',
-          target: '/index.html',
-          status: '200',
-        },
-      ],
-    });
-
-    // Connect the main branch so it triggers builds on push
-    const mainBranch = new amplify.CfnBranch(this, 'MainBranch', {
-      appId: amplifyApp.attrAppId,
-      branchName: 'main',
-      enableAutoBuild: true,
-    });
-
-    const developmentBranch = new amplify.CfnBranch(this, 'DevelopmentBranch', {
-      appId: amplifyApp.attrAppId,
-      branchName: 'development',
-      enableAutoBuild: true,
-    });
-
+    */
 
     // 3. OUTPUTS
-
-    new cdk.CfnOutput(this, 'AmplifyAppUrl', {
-      // .attrDefaultDomain fetches the auto-generated Amplify URL
-      value: `https://${mainBranch.branchName}.${amplifyApp.attrDefaultDomain}`,
-    });
 
     new cdk.CfnOutput(this, 'LambdaFunctionName', {
       value: engineLambda.functionName,

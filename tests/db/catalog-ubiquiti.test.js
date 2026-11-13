@@ -3,7 +3,7 @@
 // Covers the automatable cases 006-01 to 006-06, 006-08 to 006-14, 006-16 to 006-21 in NWP-SETUP-006-007-test-cases.md.
 // 006-07 and the "which gateways should have firewall_specs" list in 006-15 are manual (compare against spec sheets).
 //
-// Run:  node --test tests/setup-006/
+// Run:  node --test tests/db/catalog-ubiquiti.test.js
 // Dev deps: npm i -D ajv ajv-formats
 // Env overrides:
 //   CATALOG_DIR        directory holding unifi-routers.json, unifi-switches.json, unifi-aps.json
@@ -17,8 +17,8 @@ const path = require('node:path');
 const Ajv2020 = require('ajv/dist/2020');
 const addFormats = require('ajv-formats');
 
-const CATALOG_DIR = process.env.CATALOG_DIR || path.resolve(__dirname, '../../db/catalog/ubiquiti');
-const SCHEMA_PATH = process.env.SCHEMA_PATH || path.resolve(__dirname, '../../db/catalog/schema/device-schemas.json');
+const CATALOG_DIR = process.env.CATALOG_DIR || path.resolve(__dirname, '../../backend/db/catalog/ubiquiti');
+const SCHEMA_PATH = process.env.SCHEMA_PATH || path.resolve(__dirname, '../../backend/db/catalog/schema/device-schemas.json');
 const PRODUCT_LINES_PATH = process.env.PRODUCT_LINES_PATH || path.resolve(CATALOG_DIR, 'unifi-productlines.json');
 
 const FILES = [

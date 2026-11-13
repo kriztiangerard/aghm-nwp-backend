@@ -11,11 +11,11 @@ const {
   CONTRACT_VERSION,
   ValidationError,
   validateEngineResult,
-} = require('../src/types/engine/contracts');
+} = require('../backend/src/types/engine/contracts');
 
 // The handler and pipeline paths follow backend/src/types/engine.
-const HANDLER_MODULE = '../src/types/engine/lambda-handler'; // exports { handler }
-const PIPELINE_MODULE = '../src/types/engine/index'; // exports { run }, which the handler calls
+const HANDLER_MODULE = '../backend/src/types/engine/lambda-handler'; // exports { handler }
+const PIPELINE_MODULE = '../backend/src/types/engine/index'; // exports { run }, which the handler calls
 // The event is an API Gateway proxy event: the payload is a JSON string in event.body.
 const makeEvent = (payload) => ({ body: JSON.stringify(payload) });
 // The response is { statusCode, body }, where body is a JSON string.

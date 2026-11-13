@@ -7,9 +7,8 @@ const {
   recommendPower,
   computePlanLoadW,
   buildPowerProtection,
-} = require('../../src/types/engine/devices/power.js');
-
-const { createCtx } = require('../../src/types/engine/ctx.js');
+} = require('../../backend/src/types/engine/devices/power.js');
+const { createCtx } = require('../../backend/src/types/engine/ctx.js');
 
 test('recommendPower marks frequent outages as prominent', () => {
   const result = recommendPower({

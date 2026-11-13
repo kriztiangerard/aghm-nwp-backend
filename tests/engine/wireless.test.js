@@ -5,12 +5,12 @@ const assert = require('node:assert/strict');
 
 const {
  wirelessRequirements
-} = require('../../src/types/engine/requirements/wireless.js');
+} = require('../../backend/src/types/engine/requirements/wireless.js');
 
-const { createCtx } = require('../../src/types/engine/ctx.js');
+const { createCtx } = require('../../backend/src/types/engine/ctx.js');
 const {
  validateRequirements
-} = require('../../src/types/engine/contracts.js');
+} = require('../../backend/src/types/engine/contracts.js');
 
 function makeInput(overrides = {}) {
  return {

@@ -3,8 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { selectGateway } = require('../../src/types/engine/devices/gateway.js');
-const { createCtx } = require('../../src/types/engine/ctx.js');
+const { selectGateway } = require('../../backend/src/types/engine/devices/gateway.js');
+const { createCtx } = require('../../backend/src/types/engine/ctx.js');
 
 function makeGateway(overrides = {}) {
   return {
@@ -1072,7 +1072,7 @@ test('synthetic discontinued gateway is excluded from selection', () => {
 });
 
 test('shared selector keeps the synthetic SUNSETTING AP eligible', () => {
-  const { selectSku } = require('../../src/types/engine/select.js');
+  const { selectSku } = require('../../backend/src/types/engine/select.js');
   const syntheticCatalog = require('../fixtures/catalogs/synthetic-catalog-edgecases.json');
   const sunsettingAp = syntheticCatalog.find(
     (sku) => sku.sku === 'SYN-AP-003',
