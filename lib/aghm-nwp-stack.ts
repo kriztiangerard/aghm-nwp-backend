@@ -53,7 +53,7 @@ export class AghmNwpStack extends cdk.Stack {
     );
     const repositoryRoot = path.join(__dirname, '..');
     const engineLambda = new lambdaNodejs.NodejsFunction(this, 'EngineFunction', {
-      entry: path.join(repositoryRoot, 'backend', 'src', 'types', 'engine', 'lambda-handler.js'),
+      entry: path.join(repositoryRoot, 'src', 'types', 'engine', 'lambda-handler.js'),
       projectRoot: repositoryRoot,
       depsLockFilePath: path.join(repositoryRoot, 'package-lock.json'),
       runtime: lambda.Runtime.NODEJS_20_X,

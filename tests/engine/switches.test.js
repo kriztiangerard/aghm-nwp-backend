@@ -7,9 +7,9 @@ const {
   selectSwitches,
   calculatePerFloorPorts,
   applyGrowthMultiplier
-} = require('../../backend/src/types/engine/devices/switches.js');
+} = require('../../src/types/engine/devices/switches.js');
 
-const { createCtx } = require('../../backend/src/types/engine/ctx.js');
+const { createCtx } = require('../../src/types/engine/ctx.js');
 
 test('adds each floor AP count to evenly distributed edge and PoE ports', () => {
   const result = calculatePerFloorPorts({
@@ -118,7 +118,7 @@ test('rejects invalid growth percentages', () => {
 const {
   getSupportedPoeStandards,
   supportsPoeRequirement,
-} = require('../../backend/src/types/engine/devices/switches.js');
+} = require('../../src/types/engine/devices/switches.js');
 
 test('PoE+ supports 802.3af and 802.3at, but not 802.3bt', () => {
   const sku = {
@@ -187,7 +187,7 @@ test('does not infer PoE support from wattage alone', () => {
 
 const {
   getPoePortCapabilities,
-} = require('../../backend/src/types/engine/devices/switches.js');
+} = require('../../src/types/engine/devices/switches.js');
 
 test('counts mixed PoE+ and PoE++ ports separately', () => {
   const sku = {
@@ -239,7 +239,7 @@ test('returns zero capabilities when mixed port counts do not match catalog data
 
 const {
   switchMeetsRequirements,
-} = require('../../backend/src/types/engine/devices/switches.js');
+} = require('../../src/types/engine/devices/switches.js');
 
 const baseSwitch = {
   name: 'Managed PoE+ Switch',
@@ -366,7 +366,7 @@ test('allows zero uplinks when the switch has no SFP ports', () => {
 
 const {
   getMinimumIdenticalSwitchQuantity,
-} = require('../../backend/src/types/engine/devices/switches.js');
+} = require('../../src/types/engine/devices/switches.js');
 
 test('calculates the smallest quantity when one switch lacks enough total ports', () => {
   const sku = {
@@ -456,7 +456,7 @@ test('returns no solution when each switch lacks the required uplink capacity', 
 
 const {
   calculateAccessSwitchUplinks,
-} = require('../../backend/src/types/engine/devices/switches.js');
+} = require('../../src/types/engine/devices/switches.js');
 
 test('requires zero access uplinks for a single-floor site, even with redundancy requested', () => {
   assert.equal(calculateAccessSwitchUplinks({
@@ -492,7 +492,7 @@ test('rejects invalid floor counts', () => {
 
 const {
   calculateCoreSwitchQuantity,
-} = require('../../backend/src/types/engine/devices/switches.js');
+} = require('../../src/types/engine/devices/switches.js');
 
 test('selects one core switch when redundancy is not required', () => {
   assert.equal(calculateCoreSwitchQuantity({
@@ -518,7 +518,7 @@ test('rejects a non-boolean redundancy setting for core quantity', () => {
 
 const {
   addSingleHomingLimitation,
-} = require('../../backend/src/types/engine/devices/switches.js');
+} = require('../../src/types/engine/devices/switches.js');
 
 test('adds the edge-device single-homing limitation flag', () => {
   const ctx = { ledger: [], flags: [], unmet: [] };
@@ -825,7 +825,7 @@ test('requires no access uplinks for a single-floor site', () => {
   assert.equal(result.accessSwitches[0].uplinksPerSwitch, 0);
 });
 
-const { computePoeBudget } = require('../../backend/src/types/engine/devices/poe.js');
+const { computePoeBudget } = require('../../src/types/engine/devices/poe.js');
 
 test('integrates the real PoE budget calculation with switch selection', () => {
   const ctx = createCtx();

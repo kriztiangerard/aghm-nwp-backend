@@ -3,8 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { selectSku, UNPRICED_FLAG_CODE } = require('../backend/src/types/engine/select.js');
-const { createCtx } = require('../backend/src/types/engine/ctx.js');
+const { selectSku, UNPRICED_FLAG_CODE } = require('../src/types/engine/select.js');
+const { createCtx } = require('../src/types/engine/ctx.js');
 
 function sku(id, price, rank = 1, status = 'ACTIVE', vendor = 'Vendor-A', extra = {}) {
     return {

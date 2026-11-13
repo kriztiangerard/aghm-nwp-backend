@@ -36,7 +36,7 @@
     "bin",
     "lib",
     "test"
-  ],
+, "tests/backend-api.test.ts", "tests/aghm-nwp.test.ts"  ],
   "exclude": [
   "node_modules",
   "cdk.out",

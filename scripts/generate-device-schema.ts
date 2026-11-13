@@ -10,11 +10,11 @@ const scriptDirectory = dirname(__filename)
 const repositoryRoot = resolve(scriptDirectory, '../..')
 const schemaPath = resolve(
   repositoryRoot,
-  'backend/db/catalog/schema/device-schemas.json'
+  'db/catalog/schema/device-schemas.json'
 )
 const outputPath = resolve(
   repositoryRoot,
-  'backend/db/catalog/schema/generated-schema.ts'
+  'db/catalog/schema/generated-schema.ts'
 )
 
 const resolveLocalReferences = (

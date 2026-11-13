@@ -4,12 +4,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const realHelper = require('../backend/src/types/engine/select.js');
+const realHelper = require('../src/types/engine/select.js');
 const stubHelper = require('./helpers/select-stub.js');
-const { createCtx } = require('../backend/src/types/engine/ctx.js');
+const { createCtx } = require('../src/types/engine/ctx.js');
 const {
     validateSelectionResult
-} = require('../backend/src/types/engine/contracts.js');
+} = require('../src/types/engine/contracts.js');
 
 test('NWP-ENGINE-007-TC-009: stub matches the real helper contract', () => {
     assert.equal(typeof realHelper.selectSku, 'function');

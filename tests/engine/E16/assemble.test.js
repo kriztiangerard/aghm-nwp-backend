@@ -1,8 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createCtx } = require('../../../backend/src/types/engine/ctx.js');
-const { validateEngineResult, CONTRACT_VERSION } = require('../../../backend/src/types/engine/contracts.js');
+const { createCtx } = require('../../../src/types/engine/ctx.js');
+const { validateEngineResult, CONTRACT_VERSION } = require('../../../src/types/engine/contracts.js');
 const {
   assembleLedger,
   assembleFlags,
@@ -10,7 +10,7 @@ const {
   assembleEngineResult,
   finalizeEngineResult,
   assertJsonSafe,
-} = require('../../../backend/src/types/engine/steps/assemble.js');
+} = require('../../../src/types/engine/steps/assemble.js');
 const { catalog, makePlan, requirements, input, deepFreeze } = require('../../fixtures/e16-fixtures.js');
 
 const STAMP = '2026-11-10T00:00:00.000Z';

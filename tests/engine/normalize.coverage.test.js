@@ -5,9 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { normalize } = require('../../backend/src/types/engine/normalize');
-const params = require('../../backend/src/types/engine/params');
-const { createCtx } = require('../../backend/src/types/engine/ctx');
+const { normalize } = require('../../src/types/engine/normalize');
+const params = require('../../src/types/engine/params');
+const { createCtx } = require('../../src/types/engine/ctx');
 
 const baseline = JSON.parse(
   fs.readFileSync(

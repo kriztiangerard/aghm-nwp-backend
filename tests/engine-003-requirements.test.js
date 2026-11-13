@@ -4,10 +4,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createCtx } = require('../backend/src/types/engine/ctx');
-const { validateRequirements } = require('../backend/src/types/engine/contracts');
-const { deriveNetworkRequirements } = require('../backend/src/types/engine/requirements/network');
-const { deriveConnectivityRequirements } = require('../backend/src/types/engine/requirements/connectivity');
+const { createCtx } = require('../src/types/engine/ctx');
+const { validateRequirements } = require('../src/types/engine/contracts');
+const { deriveNetworkRequirements } = require('../src/types/engine/requirements/network');
+const { deriveConnectivityRequirements } = require('../src/types/engine/requirements/connectivity');
 
 function deriveBoth(input) {
   const ctx = createCtx();

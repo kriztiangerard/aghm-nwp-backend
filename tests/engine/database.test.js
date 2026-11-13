@@ -7,8 +7,8 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 const PG_PATH = require.resolve('pg');
-const DATABASE_PATH = path.resolve(__dirname, '../../backend/src/types/engine/database.js');
-const REPOSITORY_PATH = path.resolve(__dirname, '../../backend/src/types/engine/catalog-repository.js');
+const DATABASE_PATH = path.resolve(__dirname, '../../src/types/engine/database.js');
+const REPOSITORY_PATH = path.resolve(__dirname, '../../src/types/engine/catalog-repository.js');
 const ENV_KEYS = ['DATABASE_URL', 'DATABASE_SECRET_ARN', 'DB_SSL'];
 
 function loadFresh() {

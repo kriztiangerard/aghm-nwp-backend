@@ -1,6 +1,6 @@
 'use strict';
 
-const { createCtx } = require('../../backend/src/types/engine/ctx.js');
+const { createCtx } = require('../../src/types/engine/ctx.js');
 
 // This consumer depends only on the selectSku interface.
 function selectCheapestSwitch(selectSku, pool) {

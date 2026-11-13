@@ -1,9 +1,9 @@
 // tests/engine/normalize.test.js  (NWP-ENGINE-002)
 const test = require('node:test');
 const assert = require('node:assert');
-const { normalize } = require('../../backend/src/types/engine/normalize');
-const { createCtx } = require('../../backend/src/types/engine/ctx');
-const { validateNormalizedInput } = require('../../backend/src/types/engine/contracts');
+const { normalize } = require('../../src/types/engine/normalize');
+const { createCtx } = require('../../src/types/engine/ctx');
+const { validateNormalizedInput } = require('../../src/types/engine/contracts');
 const baseline = require('../fixtures/raw-answers/input1-baseline.json');
 const sparse = require('../fixtures/raw-answers/input2-sparse-notsure.json');
 
@@ -213,9 +213,9 @@ test('blank Q11 defaults to notChecked and records the assumption', () => {
   );
 });
 test('engine runner builds plans and rejects invalid questionnaire answers', async () => {
-  const { run: runEngine } = require('../../backend/src/types/engine');
+  const { run: runEngine } = require('../../src/types/engine');
   const catalogSnapshot = require('../fixtures/catalogs/omada.snapshot.json');
-  const { flatRowToCatalogSku } = require('../../backend/src/types/engine/catalog-mapping');
+  const { flatRowToCatalogSku } = require('../../src/types/engine/catalog-mapping');
   const engineData = {
     catalog: catalogSnapshot.skus.map((row) => flatRowToCatalogSku(row).sku),
     vendors: [{

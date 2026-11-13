@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 
 const {
   selectAccessPoints,
-} = require('../../backend/src/types/engine/devices/aps.js');
-const { createCtx } = require('../../backend/src/types/engine/ctx.js');
+} = require('../../src/types/engine/devices/aps.js');
+const { createCtx } = require('../../src/types/engine/ctx.js');
 
 const vendor = 'Omada';
 const vendorId = 2;

@@ -17,8 +17,8 @@ const path = require('node:path');
 const Ajv2020 = require('ajv/dist/2020');
 const addFormats = require('ajv-formats');
 
-const CATALOG_DIR = process.env.CATALOG_DIR || path.resolve(__dirname, '../../backend/db/catalog/ubiquiti');
-const SCHEMA_PATH = process.env.SCHEMA_PATH || path.resolve(__dirname, '../../backend/db/catalog/schema/device-schemas.json');
+const CATALOG_DIR = process.env.CATALOG_DIR || path.resolve(__dirname, '../../db/catalog/ubiquiti');
+const SCHEMA_PATH = process.env.SCHEMA_PATH || path.resolve(__dirname, '../../db/catalog/schema/device-schemas.json');
 const PRODUCT_LINES_PATH = process.env.PRODUCT_LINES_PATH || path.resolve(CATALOG_DIR, 'unifi-productlines.json');
 
 const FILES = [

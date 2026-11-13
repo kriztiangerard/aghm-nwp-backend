@@ -1,11 +1,11 @@
 # Recommendation engine (Lambda: Engine / BOM)
 
-This folder contains the Engine Lambda entrypoint at `backend/src/types/engine/lambda-handler.js`. CDK bundles that entrypoint with handler `lambda-handler.handler`.
+This folder contains the Engine Lambda entrypoint at `src/types/engine/lambda-handler.js`. CDK bundles that entrypoint with handler `lambda-handler.handler`.
 Tests and fixtures live outside it, in the repository's `tests/` directory, so they are not zipped.
 
 The handler accepts the frontend NetworkConfiguration (or legacy Q-numbered raw answers), normalizes it, derives requirements, loads vendor descriptors and canonical CatalogSku JSON from PostgreSQL, runs the vendor/plan orchestration, then timestamps and validates the result.
 
-Before deploying, apply `backend/migrations/002_engine_catalog.sql` and populate `vendor.management_modes` and `engine_catalog_sku.catalog_sku`. The SKU JSON must satisfy `contracts.js` and contain the selector-specific fields required for that category. These canonical records are intentionally not synthesized from incomplete legacy device rows; verify the DB catalog and selector fields before enabling the endpoint.
+Before deploying, apply `db/migrations/002_engine_catalog.sql` and populate `vendor.management_modes` and `engine_catalog_sku.catalog_sku`. The SKU JSON must satisfy `contracts.js` and contain the selector-specific fields required for that category. These canonical records are intentionally not synthesized from incomplete legacy device rows; verify the DB catalog and selector fields before enabling the endpoint.
 
 The DB URL is fetched at runtime from the Secrets Manager secret `aghm-nwp/database`; `DB_SSL=true` and the bundled RDS CA are used for TLS. CDK imports the configured VPC and database security group. Ensure the Lambda security group can connect to PostgreSQL on port 5432 and private subnets can reach Secrets Manager (through NAT or a VPC endpoint). Deploy with `CDK_DEFAULT_ACCOUNT` set in `ap-southeast-1` so CDK can look up the VPC.
 
@@ -39,6 +39,6 @@ The DB URL is fetched at runtime from the Secrets Manager secret `aghm-nwp/datab
 | C | 007, 008, 010 | `select.js`, `devices/gateway.js`, `devices/aps.js` |
 | D | 005, 011, 012, 013 | `requirements/devices.js`, `devices/poe.js`, `devices/switches.js`, `devices/optics.js` |
 
-## Commands (run from `backend/`)
+## Commands (run from the repository root)
 - `npm test` — run all `*.test.js` files
 - `npm run chain` — run the fixture chain (`scripts/run-chain.js`)

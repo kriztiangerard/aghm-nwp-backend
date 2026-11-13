@@ -21,7 +21,7 @@ const { createCtx } = require('../src/types/engine/ctx');
 
 const ROOT = path.join(__dirname, '..');
 const ENGINE_DIR = path.join(ROOT, 'src', 'types', 'engine');
-const FIXTURES_DIR = path.join(ROOT, '..', 'tests', 'fixtures');
+const FIXTURES_DIR = path.join(ROOT, 'tests', 'fixtures');
 
 // ---- Steps: align file and fn with the scaffold stubs (one-time edit) ----------------
 //

@@ -1,5 +1,5 @@
 'use strict';
-// backend/src/.../engine/devices/controller.js
+// src/types/engine/devices/controller.js
 // STUB for NWP-ENGINE-018 (controller selection). Replace with the real module when 018 merges.
 // Same exports and signatures as the 018 interface, so NWP-ENGINE-015 does not change at the swap.
 

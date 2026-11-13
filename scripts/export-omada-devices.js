@@ -282,7 +282,7 @@ async function main() {
     console.error(e.message);
     process.exit(1);
   }
-  const outPath = path.resolve(args.out || path.join(__dirname, '..', '..', 'tests', 'fixtures', 'catalogs', 'omada.snapshot.json'));
+  const outPath = path.resolve(args.out || path.join(__dirname, '..', 'tests', 'fixtures', 'catalogs', 'omada.snapshot.json'));
 
   let Client;
   try {

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // To swap implementations, change only this import.
-const { selectSku } = require('../backend/src/types/engine/select.js');
+const { selectSku } = require('../src/types/engine/select.js');
 // const { selectSku } = require('./helpers/select-stub.js');
 
 const { selectCheapestSwitch } = require('./helpers/select-consumer.js');

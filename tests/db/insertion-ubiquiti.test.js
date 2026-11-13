@@ -19,7 +19,7 @@ const { Client } = require('pg');
 // ===================== ADAPTER (edit me) =====================
 // Assumption: the script is a module exporting ingest({ files, client }) that resolves to
 // { inserted, updated, skipped }, logs per-entry errors via console.error, and never throws for a bad entry.
-const INGEST_MODULE = process.env.INGEST_MODULE || path.resolve(__dirname, '../../backend/scripts/ingest-catalog.js');
+const INGEST_MODULE = process.env.INGEST_MODULE || path.resolve(__dirname, '../../scripts/ingest-catalog.js');
 async function runIngest(client, files) {
   const { ingest } = require(INGEST_MODULE);
   const errors = [];

@@ -6,12 +6,12 @@ const raw = require('../fixtures/raw-answers/input1-baseline.json');
 const requirements = require('../fixtures/requirements/input1-requirements.json');
 const catalogSnapshot = require('../fixtures/catalogs/omada.snapshot.json');
 
-const { normalize } = require('../../backend/src/types/engine/normalize');
-const { createCtx } = require('../../backend/src/types/engine/ctx');
-const { computePoeBudget } = require('../../backend/src/types/engine/devices/poe');
-const { buildBom } = require('../../backend/src/types/engine/bom');
-const { runEngine, validateEngineInputs } = require('../../backend/src/types/engine/orchestration');
-const { flatRowToCatalogSku } = require('../../backend/src/types/engine/catalog-mapping');
+const { normalize } = require('../../src/types/engine/normalize');
+const { createCtx } = require('../../src/types/engine/ctx');
+const { computePoeBudget } = require('../../src/types/engine/devices/poe');
+const { buildBom } = require('../../src/types/engine/bom');
+const { runEngine, validateEngineInputs } = require('../../src/types/engine/orchestration');
+const { flatRowToCatalogSku } = require('../../src/types/engine/catalog-mapping');
 const syntheticEdgeCases = require('../fixtures/catalogs/synthetic-catalog-edgecases.json');
 const syntheticProductLines = require('../fixtures/catalogs/synthetic-catalog-productlines.json');
 
@@ -187,12 +187,12 @@ test('does not create plans for Generic catalog rows', () => {
   assert.ok(result.plans.every((plan) => plan.vendor !== 'Generic'));
 });
 test('exports a plan builder for individual vendor-plan orchestration', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   assert.equal(typeof buildPlan, 'function');
 });
 test('buildPlan records a successful gateway selection', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
   const gatewaySku = {
@@ -226,7 +226,7 @@ test('buildPlan records a successful gateway selection', () => {
   ]);
 });
 test('buildPlan keeps UPS recommendations advisory and excludes UPS equipment', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const gatewaySku = {
     sku: 'TEST-GW-POWER',
@@ -275,7 +275,7 @@ test('buildPlan keeps UPS recommendations advisory and excludes UPS equipment', 
 });
 
 test('buildPlan marks the plan incomplete when gateway selection is unmet', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
 
@@ -311,7 +311,7 @@ test('buildPlan marks the plan incomplete when gateway selection is unmet', () =
 });
 
 test('buildPlan uses the no-current-model message when a required category has no current SKU', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
   const ctx = createCtx();
   const catalogWithoutCurrentGateway = catalog.map((sku) =>
     sku.category === 'gateway'
@@ -344,7 +344,7 @@ test('buildPlan uses the no-current-model message when a required category has n
   assert.equal(ctx.unmet[0].reason, expectedReason);
 });
 test('buildPlan propagates unexpected gateway selector errors', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
   const selectorError = new Error('Unexpected gateway implementation failure');
@@ -471,7 +471,7 @@ test('runEngine continues building every vendor-plan combination when gateway is
 });
 
 test('buildPlan preserves shared wireless requirements and passes the correct VPN slice', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   for (const planType of ['CE', 'HP']) {
     const ctx = createCtx();
@@ -520,7 +520,7 @@ test('buildPlan preserves shared wireless requirements and passes the correct VP
 
 
 test('buildPlan records a successful AP selection when the AP selector is injected', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
   const gatewaySku = {
@@ -582,7 +582,7 @@ test('buildPlan records a successful AP selection when the AP selector is inject
 
 
 test('buildPlan records the PoE budget when the PoE function is injected', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
   const gatewaySku = {
@@ -646,7 +646,7 @@ test('buildPlan records the PoE budget when the PoE function is injected', () =>
 
 
 test('buildPlan integrates the real PoE budget calculator', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
   const gatewaySku = {
@@ -817,8 +817,8 @@ test('runEngine preserves injected installation-materials builders', () => {
 });
 
 test('buildPlan integrates the real switch selector and records selected access switches', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
-  const { selectSwitches } = require('../../backend/src/types/engine/devices/switches');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
+  const { selectSwitches } = require('../../src/types/engine/devices/switches');
 
   const ctx = createCtx();
 
@@ -929,8 +929,8 @@ assert.ok(
 });
 
 test('buildPlan records exactly one fiber link and two optic modules for a single-floor site', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
-  const { selectSwitches } = require('../../backend/src/types/engine/devices/switches');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
+  const { selectSwitches } = require('../../src/types/engine/devices/switches');
 
   const ctx = createCtx();
 
@@ -1016,7 +1016,7 @@ test('buildPlan records exactly one fiber link and two optic modules for a singl
 });
 
 test('buildPlan keeps UPS power protection advisory and out of selected equipment', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   for (const [power, expectedLevel] of [
     ['stable', 'advisory'],
@@ -1069,7 +1069,7 @@ test('buildPlan keeps UPS power protection advisory and out of selected equipmen
 });
 
 test('buildPlan selects a Generic enclosure when rack space is required', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
 
@@ -1140,7 +1140,7 @@ test('buildPlan selects a Generic enclosure when rack space is required', () => 
 });
 
 test('buildPlan accounts for gateway quantity when calculating required enclosure capacity', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
 
@@ -1215,8 +1215,8 @@ test('buildPlan accounts for gateway quantity when calculating required enclosur
 });
 
 test('buildPlan marks the plan incomplete when the real switch selector cannot find a switch', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
-  const { selectSwitches } = require('../../backend/src/types/engine/devices/switches');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
+  const { selectSwitches } = require('../../src/types/engine/devices/switches');
 
   const ctx = createCtx();
 
@@ -1284,7 +1284,7 @@ test('buildPlan marks the plan incomplete when the real switch selector cannot f
 });
 
 test('buildPlan marks the plan incomplete when no suitable Generic enclosure exists', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
 
@@ -1341,7 +1341,7 @@ test('buildPlan marks the plan incomplete when no suitable Generic enclosure exi
 });
 
 test('buildPlan rejects a gateway SKU from another vendor', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
 
@@ -1376,7 +1376,7 @@ test('buildPlan rejects a gateway SKU from another vendor', () => {
 });
 
 test('buildPlan rejects an AP SKU from another vendor', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
 
@@ -1424,7 +1424,7 @@ test('buildPlan rejects an AP SKU from another vendor', () => {
 });
 
 test('buildPlan rejects a Generic gateway SKU', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
 
@@ -1504,7 +1504,7 @@ test('runEngine calls buildBom once per vendor-plan and passes the plan and cata
 
 
 test('buildPlan records deduplicated BOM price, stale-price, and incomplete-plan advisories', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
   const ctx = createCtx();
   const bom = {
     currency: 'PHP',
@@ -1569,8 +1569,8 @@ test('buildPlan records deduplicated BOM price, stale-price, and incomplete-plan
 });
 
 test('buildPlan emits BOM advisories from the real builder and catalog provenance', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
-  const { assembleEngineResult } = require('../../backend/src/types/engine/steps/assemble');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
+  const { assembleEngineResult } = require('../../src/types/engine/steps/assemble');
   const ctx = createCtx();
   const mappedCatalog = mapCatalogRows(catalog);
   const gateway = mappedCatalog.find((row) => row.category === 'gateway' && row.rack_units > 0);
@@ -1700,7 +1700,7 @@ test('runEngine keeps the BOM total unchanged when power protection is prominent
 });
 
 test('buildPlan rejects invalid BOM output from the injected builder', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   assert.throws(
     () =>
@@ -1728,7 +1728,7 @@ test('buildPlan rejects invalid BOM output from the injected builder', () => {
 });
 
 test('buildPlan leaves the placeholder BOM when no builder is injected', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const plan = buildPlan(
     omadaVendor,
@@ -2046,7 +2046,7 @@ test('runEngine stops before selector execution when input validation fails', ()
 });
 
 test('buildPlan rejects an access switch SKU from another vendor', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const ctx = createCtx();
 
@@ -2159,8 +2159,8 @@ test('runEngine aggregates default-vendor selection context without mixing it in
 });
 
 test('buildPlan propagates ValidationError from a selector unchanged', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
-  const { ValidationError } = require('../../backend/src/types/engine/contracts');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
+  const { ValidationError } = require('../../src/types/engine/contracts');
 
   const selectorError = new ValidationError(
     'gateway.requirements',
@@ -2190,7 +2190,7 @@ test('buildPlan propagates ValidationError from a selector unchanged', () => {
 });
 
 test('buildPlan records access-point unmet result against the current vendor', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
 
   const gatewaySku = {
     sku: 'TEST-AP-UNMET-GATEWAY',
@@ -2373,7 +2373,7 @@ test('AC6 continues building other vendor-plan combinations when enclosure is un
 });
 
 test('AC7 calls controller selection after counting selected devices and adds the controller', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
   const vendor = { ...testVendor };
   const ctx = createCtx();
 
@@ -2482,7 +2482,7 @@ test('AC7 calls controller selection after counting selected devices and adds th
 });
 
 test('AC7 skips separate controller selection when the gateway has an integrated controller', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
   const vendor = { ...testVendor };
   const ctx = createCtx();
 
@@ -2514,7 +2514,7 @@ test('AC7 skips separate controller selection when the gateway has an integrated
           assert.strictEqual(selectedGateway, gatewaySku);
           assert.strictEqual(receivedCtx, ctx);
 
-          const controllerStep = require('../../backend/src/types/engine/devices/controller');
+          const controllerStep = require('../../src/types/engine/devices/controller');
           return controllerStep.integratedControllerCheck(selectedGateway, receivedCtx);
         },
         countManagedDevices: () => {
@@ -2542,7 +2542,7 @@ test('AC7 skips separate controller selection when the gateway has an integrated
 });
 
 test('AC7 skips controller checks when vendor needController is false', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
   const vendor = { ...omadaVendor, needController: false };
   const ctx = createCtx();
   const gatewaySku = {
@@ -2593,7 +2593,7 @@ test('AC7 skips controller checks when vendor needController is false', () => {
 });
 
 test('AC6 records controller unmet against the plan vendor and marks the plan incomplete', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
   const vendor = { ...testVendor };
   const ctx = createCtx();
   const gatewaySku = {
@@ -2631,8 +2631,8 @@ test('AC6 records controller unmet against the plan vendor and marks the plan in
 });
 
 test('AC6 propagates ValidationError from the controller selector unchanged', () => {
-  const { buildPlan } = require('../../backend/src/types/engine/orchestration');
-  const { ValidationError } = require('../../backend/src/types/engine/contracts');
+  const { buildPlan } = require('../../src/types/engine/orchestration');
+  const { ValidationError } = require('../../src/types/engine/contracts');
   const vendor = { ...testVendor };
   const gatewaySku = {
     sku: 'TEST-GW-CONTROLLER-ERROR',
