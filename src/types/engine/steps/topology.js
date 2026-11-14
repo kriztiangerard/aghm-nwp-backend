@@ -76,6 +76,27 @@ function allocate(pool, count, needsPoe, overflow) {
 
 const positiveInt = (value) => (Number.isInteger(value) && value > 0 ? value : 0);
 
+const placementForFloor = (floorNumber, qty = 1) => ({
+  floorId: `floor-${floorNumber}`,
+  floorLabel: `Floor ${floorNumber}`,
+  closetId: `closet-${floorNumber}`,
+  closetLabel: `Floor ${floorNumber} Main Network Closet`,
+  qty,
+});
+
+const distributedPlacements = (qty, floorCount, startIndex = 0) => {
+  const floors = Number.isInteger(floorCount) && floorCount > 0 ? floorCount : 1;
+  if (!Number.isInteger(qty) || qty <= 0) return [];
+
+  const placements = Array.from({ length: floors }, (_, index) => placementForFloor(index + 1, 0));
+  for (let index = 0; index < qty; index += 1) {
+    const floorIndex = ((startIndex + index) % floors) + 1;
+    placements[floorIndex - 1].qty += 1;
+  }
+
+  return placements.filter((placement) => placement.qty > 0);
+};
+
 function buildTopology(plan, reqs, input, ctx, catalog) {
   if (!plan || typeof plan !== 'object' || !Array.isArray(plan.items) || !plan.bom || !Array.isArray(plan.bom.lines)) {
     throw new ValidationError('plan', 'Plan must have items and a bom with lines.');
@@ -138,7 +159,8 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
 
   const nodes = [];
   const edges = [];
-  const addNode = (node) => {
+  const addNode = (node, placements) => {
+    if (Array.isArray(placements) && placements.length > 0) node.placements = placements;
     nodes.push(compact(node));
     return node.id;
   };
@@ -226,19 +248,24 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
   };
 
   const switchUnits = [];
+  let switchOrdinal = 0;
   switchItems.forEach((item, itemIndex) => {
     const info = describe(item);
     const layer = itemIndex === 0 ? 'core' : 'access';
     for (let unit = 0; unit < item.qty; unit += 1) {
-      const id = addNode({
-        id: `switch-${item.sku}-${nextIndex(item.sku)}`,
-        role: 'switch',
-        layer,
-        label: info.label,
-        sku: item.sku,
-        qty: 1,
-        status: info.status,
-      });
+      const id = addNode(
+        {
+          id: `switch-${item.sku}-${nextIndex(item.sku)}`,
+          role: 'switch',
+          layer,
+          label: info.label,
+          sku: item.sku,
+          qty: 1,
+          status: info.status,
+        },
+        distributedPlacements(1, input.floors, switchOrdinal)
+      );
+      switchOrdinal += 1;
       switchUnits.push({ id, layer, sku: item.sku, row: info.row });
     }
   });
@@ -252,15 +279,18 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
   let apId = null;
   if (apItem) {
     const ap = describe(apItem);
-    apId = addNode({
-      id: `access_point-${ap.sku}-0`,
-      role: 'access_point',
-      layer: 'edge',
-      label: ap.label,
-      sku: ap.sku,
-      qty: apItem.qty,
-      status: ap.status,
-    });
+    apId = addNode(
+      {
+        id: `access_point-${ap.sku}-0`,
+        role: 'access_point',
+        layer: 'edge',
+        label: ap.label,
+        sku: ap.sku,
+        qty: apItem.qty,
+        status: ap.status,
+      },
+      distributedPlacements(apItem.qty, input.floors, 0)
+    );
   }
 
   // ---- Client groups: one grouped node per kind, carrying a count ----
@@ -294,14 +324,17 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
       continue;
     }
 
-    groupNodeIds[group.kind] = addNode({
-      id: `client-${group.kind}`,
-      role: 'client_group',
-      layer: 'edge',
-      label: group.label,
-      count,
-      clientKind: group.kind,
-    });
+    groupNodeIds[group.kind] = addNode(
+      {
+        id: `client-${group.kind}`,
+        role: 'client_group',
+        layer: 'edge',
+        label: group.label,
+        count,
+        clientKind: group.kind,
+      },
+      distributedPlacements(count, input.floors, 0)
+    );
   }
 
   // ---- Attachment: fixed fill rule over the pool, in plan order (AC4) ----
