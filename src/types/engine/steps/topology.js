@@ -426,4 +426,4 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
   return { nodes, edges };
 }
 
-module.exports = { buildTopology };
+module.exports = { buildTopology, distributedPlacements, placementForFloor };
