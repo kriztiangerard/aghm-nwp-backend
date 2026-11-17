@@ -1,0 +1,51 @@
+{
+  "project": { "name": "Parity check office", "numberOfSites": 1, "totalUsers": 60 },
+  "physicalSpace": {
+    "numberOfFloors": 2,
+    "floorAreaPerFloor": 400,
+    "roomsPerFloor": 8,
+    "largeGroupRooms": {
+      "hasLargeGroupRooms": true,
+      "rooms": [{ "floor": 1, "capacity": 60 }]
+    }
+  },
+  "existingNetwork": {
+    "equipmentStatus": "none",
+    "existingCabling": "none_or_not_sure"
+  },
+  "internet": {
+    "currentSpeedMbps": 500,
+    "connectionType": "fiber",
+    "downtimeImpact": "same_day_matters"
+  },
+  "devices": {
+    "wiredComputers": 25,
+    "wifiDevices": 80,
+    "voip": { "enabled": true, "phoneCount": 20 },
+    "ipCameras": { "enabled": true, "cameraCount": 8 },
+    "otherNetworkDevices": { "enabled": false }
+  },
+  "preferences": {
+    "guestWifi": true,
+    "sensitiveData": "no",
+    "applications": {
+      "videoConferencing": true,
+      "voipCalls": true,
+      "posPayment": false,
+      "cloudStorage": true,
+      "businessSoftware": true,
+      "videoStreaming": false,
+      "securityCameraViewing": true,
+      "basicBrowsingEmail": true
+    },
+    "equipmentLocation": "wall_cabinet",
+    "managementPreference": "dashboard"
+  },
+  "businessContext": {
+    "monthlyITBudget": "15000_40000",
+    "ITSupport": "external",
+    "electricityReliability": "stable",
+    "expectedGrowth": true,
+    "growth": { "headcountGrowth": "11_30", "newSites": "none" }
+  }
+}

@@ -13,7 +13,7 @@ const {
   validateBom,
 } = require('./contracts');
 const { createCtx, addLedger, addFlag } = require('./ctx');
-const { assembleEngineResult } = require('./steps/assemble');
+const { assemblePlan, combineAssembledPlans } = require('./steps/assemble');
 const { noCurrentModelUnmet } = require('./lifecycle');
 
 const { selectGateway } = require('./devices/gateway');
@@ -578,72 +578,50 @@ const resolvedItems = selectedDeviceItems;
   return plan;
 }
 
+// Replace for step functions.
+function toPublicPlan(plan) {
+  const next = { ...plan };
+  if (plan.switchSelection !== undefined) next.switchSelection = toPublicSelection(plan.switchSelection);
+  if (plan.enclosureSelection !== undefined) next.enclosureSelection = toPublicSelection(plan.enclosureSelection);
+  return next;
+}
 
-function runEngine(input, reqs, catalog, vendors, steps = DEFAULT_STEPS, sharedCtx = createCtx()) {
-  validateEngineInputs(input, reqs, catalog, vendors);
-
-  if (!sharedCtx || !Array.isArray(sharedCtx.ledger)
-      || !Array.isArray(sharedCtx.flags) || !Array.isArray(sharedCtx.unmet)) {
-    throw new TypeError('runEngine requires a sharedCtx from createCtx()');
-  }
-
-  const plans = [];
-
-  vendors.forEach((vendor) => {
-    PLAN_TYPES.forEach(({ planType }) => {
-      const ctx = createCtx();
-
-      plans.push(
-        buildPlan(
-          vendor,
-          planType,
-          reqs,
-          input,
-          catalog,
-          ctx,
-          steps,
-        ),
-      );
-    });
+// Per-vendor stage: CE then HP, reduced to public form and assembled.
+function buildVendorPlansAssembled({ vendor, input, requirements, catalog, sharedLedger, steps = DEFAULT_STEPS }) {
+  return PLAN_TYPES.map(({ planType }) => {
+    const plan = buildPlan(vendor, planType, requirements, input, catalog, createCtx(), steps);
+    return assemblePlan(toPublicPlan(plan), { reqs: requirements, input, catalog, sharedLedger });
   });
+}
 
-  // ENGINE-017 selects CE and HP defaults independently.
+// Final stage: default vendors and the merge. Needs every vendor's plans, but no catalog.
+function finishEngineResult({ input, requirements, vendors, plans, sharedCtx }) {
   const selectionCtx = createCtx();
-  const defaultVendor = selectDefaultVendors(
-    plans,
-    input,
-    vendors,
-    selectionCtx,
-  );
-
-  // NWP-ENGINE-016: topology, configuration plan, limitations, and the merged ledger and flags.
-  // Shared (requirements-phase) entries come first, then each plan's own entries (assembleEngineResult), then the
-  // default-vendor selection entries, as before. Selector results stay on the plan with SKU objects reduced to SKU
-  // strings, so the result holds no catalog rows. The handler stamps generatedAt with finalizeEngineResult.
-  const publicPlans = plans.map((plan) => {
-    const next = { ...plan };
-    if (plan.switchSelection !== undefined) next.switchSelection = toPublicSelection(plan.switchSelection);
-    if (plan.enclosureSelection !== undefined) next.enclosureSelection = toPublicSelection(plan.enclosureSelection);
-    return next;
-  });
-
-  const assembled = assembleEngineResult({
-    requirements: reqs,
+  const defaultVendor = selectDefaultVendors(plans, input, vendors, selectionCtx);
+  const combined = combineAssembledPlans({
+    requirements,
     sharedCtx: { ledger: sharedCtx.ledger, flags: sharedCtx.flags, unmet: [] },
-    plans: publicPlans,
+    plans,
     defaultVendor,
-    input,
-    catalog,
   });
-
   return {
-    ...assembled,
-    ledger: appendUnique(assembled.ledger, selectionCtx.ledger),
-    flags: appendUnique(assembled.flags, selectionCtx.flags),
+    ...combined,
+    ledger: appendUnique(combined.ledger, selectionCtx.ledger),
+    flags: appendUnique(combined.flags, selectionCtx.flags),
     unmet: [...sharedCtx.unmet, ...plans.flatMap((plan) => plan.unmet || [])],
   };
 }
 
+function runEngine(input, reqs, catalog, vendors, steps = DEFAULT_STEPS, sharedCtx = createCtx()) {
+  validateEngineInputs(input, reqs, catalog, vendors);
+  if (!sharedCtx || !Array.isArray(sharedCtx.ledger)
+      || !Array.isArray(sharedCtx.flags) || !Array.isArray(sharedCtx.unmet)) {
+    throw new TypeError('runEngine requires a sharedCtx from createCtx()');
+  }
+  const plans = vendors.flatMap((vendor) =>
+    buildVendorPlansAssembled({ vendor, input, requirements: reqs, catalog, sharedLedger: sharedCtx.ledger, steps }));
+  return finishEngineResult({ input, requirements: reqs, vendors, plans, sharedCtx });
+}
 
 module.exports = {
   runEngine,
@@ -652,4 +630,6 @@ module.exports = {
   createEmptyPlan,
   buildPlan,
   getPlanRequirements,
+  buildVendorPlansAssembled,
+  finishEngineResult
 };

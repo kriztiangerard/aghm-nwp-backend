@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
+import { z } from 'zod'
 
 describe('local /generate API', () => {
   test('responds with the received payload for POST requests', async () => {
@@ -37,7 +38,11 @@ describe('local /generate API', () => {
 
       expect(response.status).toBe(200)
 
-      const result = await response.json()
+      const GenerateResponse = z.object({
+        received: z.object({ project: z.object({ name: z.string() }) }),
+      })
+
+      const result = GenerateResponse.parse(await response.json())
       expect(result.received.project.name).toBe('Test Project')
     } finally {
       serverProcess.kill('SIGTERM')

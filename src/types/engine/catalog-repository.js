@@ -171,9 +171,52 @@ async function loadEngineData({ now, pool: injected } = {}) {
   return { vendors, ...buildFromRaw(raw, now) };
 }
 
+async function readVendorCatalogRows(client, vendorNames) {
+  const T = TABLES;
+  const select = async (text, params) => (await client.query(text, params)).rows;
+  const names = vendorNames.map((name) => name.toLowerCase());
+
+  const vendors = await select(
+    `SELECT vendor_id, name FROM ${T.vendor} WHERE vendor_id <> $1 AND lower(name) = ANY($2) ORDER BY vendor_id`,
+    [FIXTURE_VENDOR_ID, names]
+  );
+  const ids = vendors.map((vendor) => vendor.vendor_id);
+  const inDevices = `(SELECT device_id FROM ${T.device} WHERE vendor_id = ANY($1))`;
+
+  const devices = await select(
+    `SELECT device_id, vendor_id, product_line_id, sku, price, price_updated_at, name, description,
+            is_rack_mountable, u_height, lifecycle_status, eos_date, eol_date
+       FROM ${T.device} WHERE vendor_id = ANY($1) ORDER BY device_id`, [ids]);
+  const lines = await select(
+    `SELECT product_line_id, vendor_id, category, name, line_rank FROM ${T.productLine} WHERE vendor_id = ANY($1)`, [ids]);
+  const specs = {};
+  for (const key of ['gateway', 'switch', 'ap', 'firewall', 'controller', 'rack']) {
+    specs[key] = await select(`SELECT * FROM ${T[key]} WHERE device_id IN ${inDevices} ORDER BY device_id`, [ids]);
+  }
+  const capabilities = await select(
+    `SELECT dc.device_id, c.capability_desc
+       FROM ${T.deviceCapability} dc JOIN ${T.capability} c ON c.capability_id = dc.capability_id
+      WHERE dc.device_id IN ${inDevices} ORDER BY dc.device_id, c.capability_desc`, [ids]);
+  const pricing = await select(
+    `SELECT device_id, source_id, price, last_updated, is_stale FROM ${T.pricing}
+      WHERE device_id IN ${inDevices} ORDER BY device_id`, [ids]);
+
+  return { vendors, devices, lines, specs, capabilities, pricing };
+}
+
+// One vendor's rows plus the Generic vendor's racks and enclosures. Same build and validation as loadCatalog.
+async function loadVendorCatalog({ vendor, now, pool: injected } = {}) {
+  requireNow(now, 'loadVendorCatalog');
+  const raw = await withSnapshot((client) => readVendorCatalogRows(client, [vendor, GENERIC_VENDOR_NAME]), injected);
+  if (!raw.vendors.some((row) => row.name.trim().toLowerCase() === String(vendor).trim().toLowerCase())) {
+    throw new CatalogRepositoryError('VENDOR_NOT_FOUND', `Vendor '${vendor}' was not found in the Vendor table.`);
+  }
+  return buildFromRaw(raw, now);
+}
+
 // For scripts and local runs. Not needed in the Lambda handler.
 async function closeConnection() {
   await closePool();
 }
 
-module.exports = { loadEngineData, loadCatalog, loadVendors, closeConnection, CatalogRepositoryError, TABLES };
+module.exports = { loadEngineData, loadCatalog, loadVendors, closeConnection, CatalogRepositoryError, TABLES, loadVendorCatalog };

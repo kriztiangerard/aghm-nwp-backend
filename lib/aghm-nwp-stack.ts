@@ -11,6 +11,9 @@ import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
+import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
+import * as logs from 'aws-cdk-lib/aws-logs';
 
 export class AghmNwpStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -30,20 +33,9 @@ export class AghmNwpStack extends cdk.Stack {
     const vpc = ec2.Vpc.fromLookup(this, 'EngineVpc', {
       vpcId: 'vpc-06f55cc32200b2717',
     });
-    const lambdaSecurityGroup = new ec2.SecurityGroup(this, 'EngineLambdaSecurityGroup', {
-      vpc,
-      description: 'Network access for the recommendation engine Lambda',
-      allowAllOutbound: true,
-    });
-    const databaseSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(
-      this,
-      'EngineDatabaseSecurityGroup',
-      'sg-08314c5a76cbd8cb0',
-    );
-    databaseSecurityGroup.addIngressRule(
-      lambdaSecurityGroup,
-      ec2.Port.tcp(5432),
-      'Allow the recommendation Lambda to connect to PostgreSQL',
+
+    const lambdaSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(
+      this, 'BackendSg', 'sg-08314c5a76cbd8cb0',
     );
 
     const databaseSecret = secretsmanager.Secret.fromSecretNameV2(
@@ -51,27 +43,123 @@ export class AghmNwpStack extends cdk.Stack {
       'EngineDatabaseSecret',
       'aghm-nwp/database',
     );
-    const repositoryRoot = path.join(__dirname, '..');
-    const engineLambda = new lambdaNodejs.NodejsFunction(this, 'EngineFunction', {
-      entry: path.join(repositoryRoot, 'src', 'types', 'engine', 'lambda-handler.js'),
-      projectRoot: repositoryRoot,
-      depsLockFilePath: path.join(repositoryRoot, 'package-lock.json'),
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'lambda-handler.handler',
-      timeout: cdk.Duration.seconds(30),
-      memorySize: 512,
-      vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      securityGroups: [lambdaSecurityGroup],
-      environment: {
+
+    const makeLogGroup = (id: string) =>
+    new logs.LogGroup(this, id, {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // Update for Step Functions
+    
+      const repositoryRoot = path.join(__dirname, '..');
+      const handlersDir = path.join(repositoryRoot, 'src', 'types', 'engine', 'handlers');
+      const databaseEnvironment = {
         DATABASE_SECRET_ARN: databaseSecret.secretArn,
         DB_SSL: 'true',
-      },
-      bundling: {
-        loader: { '.pem': 'text' },
-      },
-    });
-    databaseSecret.grantRead(engineLambda);
+      };
+
+      const baseProps: lambdaNodejs.NodejsFunctionProps = {
+        projectRoot: repositoryRoot,
+        depsLockFilePath: path.join(repositoryRoot, 'package-lock.json'),
+        runtime: lambda.Runtime.NODEJS_22_X,   // Node 20 is past end-of-life; confirm 22 is still supported
+        handler: 'handler',                    // the export name only; NodejsFunction adds the file name itself
+      };
+      // The Lambdas that read RDS: inside the VPC, same security group, so one ingress rule covers them all.
+      const vpcProps: lambdaNodejs.NodejsFunctionProps = {
+        ...baseProps,
+        vpc,
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+        securityGroups: [lambdaSecurityGroup],
+        bundling: { loader: { '.pem': 'text' } },
+      };
+
+      // Map stage: one invocation per vendor.
+      const vendorPlansFn = new lambdaNodejs.NodejsFunction(this, 'VendorPlansFunction', {
+        ...vpcProps,
+        entry: path.join(handlersDir, 'vendor-plans.js'),
+        timeout: cdk.Duration.seconds(20),
+        memorySize: 1024,
+        environment: databaseEnvironment,
+        logGroup: makeLogGroup('VendorPlansLogs'),
+      });
+      databaseSecret.grantRead(vendorPlansFn);
+
+      // Final stage: no database, so no VPC and no secret.
+      const assembleFn = new lambdaNodejs.NodejsFunction(this, 'AssembleFunction', {
+        ...baseProps,
+        entry: path.join(handlersDir, 'assemble.js'),
+        timeout: cdk.Duration.seconds(15),
+        memorySize: 512,
+        logGroup: makeLogGroup('AssembleLogs'),
+      });
+
+      
+
+      const retryOnTransient = {
+        errors: [
+          'Lambda.ClientExecutionTimeoutException',
+          'Lambda.ServiceException',
+          'Lambda.AWSLambdaException',
+          'Lambda.SdkClientException',
+        ],
+        interval: cdk.Duration.seconds(2),
+        maxAttempts: 2,
+        backoffRate: 2,
+      };
+
+      const buildVendorPlans = new tasks.LambdaInvoke(this, 'BuildVendorPlans', {
+        lambdaFunction: vendorPlansFn,
+        payloadResponseOnly: true,
+        retryOnServiceExceptions: false,
+      }).addRetry(retryOnTransient);
+
+      const perVendor = new sfn.Map(this, 'PerVendor', {
+        itemsPath: '$.vendors',   // newer CDK prefers items: sfn.ProvideItems.jsonPath('$.vendors'); both work
+        maxConcurrency: 3,
+        itemSelector: {
+          vendor: sfn.JsonPath.objectAt('$$.Map.Item.Value'),
+          input: sfn.JsonPath.objectAt('$.input'),
+          requirements: sfn.JsonPath.objectAt('$.requirements'),
+          sharedLedger: sfn.JsonPath.objectAt('$.ctx.ledger'),
+          now: sfn.JsonPath.stringAt('$.now'),
+        },
+        resultPath: '$.vendorResults',
+      }).itemProcessor(buildVendorPlans);
+
+      const assemble = new tasks.LambdaInvoke(this, 'Assemble', {
+        lambdaFunction: assembleFn,
+        payloadResponseOnly: true,
+        retryOnServiceExceptions: false,
+      }).addRetry(retryOnTransient);
+
+      const workflowLogs = new logs.LogGroup(this, 'EngineWorkflowLogs', {
+        logGroupName: '/aws/vendedlogs/states/aghm-nwp-engine',
+        retention: logs.RetentionDays.ONE_WEEK,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      });
+      const engineMachine = new sfn.StateMachine(this, 'EngineStateMachine', {
+        stateMachineType: sfn.StateMachineType.EXPRESS,   // Express only: Standard would keep user inputs for 90 days
+        definitionBody: sfn.DefinitionBody.fromChainable(perVendor.next(assemble)),
+        timeout: cdk.Duration.seconds(25),
+        logs: {
+          destination: workflowLogs,
+          level: sfn.LogLevel.ERROR,
+          includeExecutionData: false,   // keeps user inputs out of the logs
+        },
+      });
+
+      // API-facing Lambda: validates, then runs the workflow and waits for it.
+      const entryFn = new lambdaNodejs.NodejsFunction(this, 'EntryFunction', {
+        ...vpcProps,
+        entry: path.join(handlersDir, 'entry.js'),
+        timeout: cdk.Duration.seconds(29),   // API Gateway HTTP APIs cut off at 30 s
+        memorySize: 512,
+        environment: { ...databaseEnvironment, STATE_MACHINE_ARN: engineMachine.stateMachineArn },
+        logGroup: makeLogGroup('EntryLogs'),
+      });
+      databaseSecret.grantRead(entryFn);
+      engineMachine.grantStartSyncExecution(entryFn);
 
 
     // 1a. BACKEND: API Gateway routes requests to the active engine handler.
@@ -87,7 +175,7 @@ export class AghmNwpStack extends cdk.Stack {
 
     const engineIntegration = new HttpLambdaIntegration(
       'EngineIntegration',
-      engineLambda,
+      entryFn,
     );
 
     httpApi.addRoutes({
@@ -124,9 +212,8 @@ export class AghmNwpStack extends cdk.Stack {
 
     // 3. OUTPUTS
 
-    new cdk.CfnOutput(this, 'LambdaFunctionName', {
-      value: engineLambda.functionName,
-    });
+    new cdk.CfnOutput(this, 'EntryFunctionName', { value: entryFn.functionName });
+    new cdk.CfnOutput(this, 'StateMachineArn', { value: engineMachine.stateMachineArn });
 
     /* new cdk.CfnOutput(this, 'PricingUpdateFunctionName', {
       value: pricingUpdateLambda.functionName,
