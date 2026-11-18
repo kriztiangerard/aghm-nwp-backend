@@ -113,6 +113,25 @@ function assemblePlan(plan, { reqs, input, catalog, sharedLedger = [] }) {
 }
 
 // defaultVendor (NWP-ENGINE-017) is attached as given.
+// Merge step for plans that are already assembled (topology, configurationPlan, limitations).
+// Updated for Step Functions
+function combineAssembledPlans({ requirements, sharedCtx, plans, defaultVendor }) {
+  if (!sharedCtx || !Array.isArray(sharedCtx.ledger) || !Array.isArray(sharedCtx.flags)) {
+    throw new ValidationError('sharedCtx', 'Shared ctx from createCtx() is required.');
+  }
+  if (!Array.isArray(plans)) {
+    throw new ValidationError('plans', 'Must be an array of plans.');
+  }
+  return {
+    contractVersion: CONTRACT_VERSION,
+    requirements,
+    ledger: assembleLedger(sharedCtx.ledger, plans),
+    flags: assembleFlags(sharedCtx.flags, plans),
+    plans,
+    defaultVendor,
+  };
+}
+
 function assembleEngineResult({ requirements, sharedCtx, plans, defaultVendor, input, catalog }) {
   if (!sharedCtx || !Array.isArray(sharedCtx.ledger) || !Array.isArray(sharedCtx.flags)) {
     throw new ValidationError('sharedCtx', 'Shared ctx from createCtx() is required.');
@@ -120,19 +139,10 @@ function assembleEngineResult({ requirements, sharedCtx, plans, defaultVendor, i
   if (!Array.isArray(plans)) {
     throw new ValidationError('plans', 'Must be an array of plans.');
   }
-
   const assembledPlans = plans.map((plan) =>
     assemblePlan(plan, { reqs: requirements, input, catalog, sharedLedger: sharedCtx.ledger })
   );
-
-  return {
-    contractVersion: CONTRACT_VERSION,
-    requirements,
-    ledger: assembleLedger(sharedCtx.ledger, assembledPlans),
-    flags: assembleFlags(sharedCtx.flags, assembledPlans),
-    plans: assembledPlans,
-    defaultVendor,
-  };
+  return combineAssembledPlans({ requirements, sharedCtx, plans: assembledPlans, defaultVendor });
 }
 
 // Throws unless the value survives JSON unchanged: no functions, symbols, bigint, non-finite numbers, class
@@ -184,4 +194,5 @@ module.exports = {
   assembleEngineResult,
   finalizeEngineResult,
   assertJsonSafe,
+  combineAssembledPlans,
 };

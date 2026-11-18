@@ -10,11 +10,11 @@ const { Pool, types } = require('pg');
 
 function readCaBundle() {
   try {
-    return require('../../../../global-bundle.pem');
+    return require('../../../global-bundle.pem');
   } catch (error) {
     if (!(error instanceof SyntaxError)) throw error;
     return fs.readFileSync(
-      path.resolve(__dirname, '../../../../global-bundle.pem'),
+      path.resolve(__dirname, '../../../global-bundle.pem'),
       'utf8',
     );
   }

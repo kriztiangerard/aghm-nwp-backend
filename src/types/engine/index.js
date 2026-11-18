@@ -9,37 +9,40 @@ const { deriveConnectivityRequirements } = require('./requirements/connectivity'
 const { deriveDeviceRequirements } = require('./requirements/devices');
 const { recommendPower } = require('./devices/power');
 const { runEngine } = require('./orchestration');
-const { loadEngineData } = require('./catalog-repository');
-const { validateRequirements } = require('./contracts');
+const { loadEngineData, loadVendors } = require('./catalog-repository');
+const { validateRequirements, validateNormalizedInput } = require('./contracts');
 
-async function run(payload, dependencies = {}) {
+function deriveRequirements(payload) {
   const ctx = createCtx();
-  const normalizedInput = normalize(normalizeRequestAnswers(payload), ctx);
-
-  const network = deriveNetworkRequirements(normalizedInput, ctx);
-  const wireless = wirelessRequirements(normalizedInput, ctx);
-  const connectivity = deriveConnectivityRequirements(normalizedInput, network, ctx);
-  const devices = deriveDeviceRequirements(normalizedInput, ctx);
+  const input = normalize(normalizeRequestAnswers(payload), ctx);
+  const network = deriveNetworkRequirements(input, ctx);
+  const wireless = wirelessRequirements(input, ctx);
+  const connectivity = deriveConnectivityRequirements(input, network, ctx);
+  const devices = deriveDeviceRequirements(input, ctx);
   const requirements = {
-    ...network,
-    wireless,
-    ...connectivity,
-    ...devices,
-    ...recommendPower({ input: normalizedInput }),
+    ...network, wireless, ...connectivity, ...devices,
+    ...recommendPower({ input }),
   };
   validateRequirements(requirements);
+  return { input, requirements, ctx };
+}
 
+// Entry-Lambda stage: everything that can reject a request, plus the vendor list. No catalog.
+async function prepare(payload, dependencies = {}) {
+  const { input, requirements, ctx } = deriveRequirements(payload);
+  validateNormalizedInput(input);
+  const vendors = await (dependencies.loadVendors || loadVendors)();
+  const now = new Date(dependencies.now ?? Date.now()).toISOString();
+  return { input, requirements, vendors, ctx, now };
+}
+
+// Single-process path: local runs, existing tests, and the parity check.
+async function run(payload, dependencies = {}) {
+  const { input, requirements, ctx } = deriveRequirements(payload);
   const engineData = await (dependencies.loadEngineData || loadEngineData)({
     now: dependencies.now ?? new Date(),
   });
-  return runEngine(
-    normalizedInput,
-    requirements,
-    engineData.catalog,
-    engineData.vendors,
-    undefined,
-    ctx,
-  );
+  return runEngine(input, requirements, engineData.catalog, engineData.vendors, undefined, ctx);
 }
 
-module.exports = { run };
+module.exports = { run, prepare };

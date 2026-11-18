@@ -22,6 +22,9 @@ jobs:
 
   cdk:
     runs-on: ubuntu-latest
+    env:
+      CDK_DEFAULT_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+      CDK_DEFAULT_REGION: ap-southeast-1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,3 +33,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx cdk synth
+
