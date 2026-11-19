@@ -19,6 +19,7 @@ jobs:
       - run: npm ci
       - run: npm test -- --runInBand
       - run: node --test tests/engine/*.test.js
+      - run: node --test tests/pricing/*.test.js
 
   cdk:
     runs-on: ubuntu-latest

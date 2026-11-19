@@ -1,10 +1,14 @@
 'use strict';
 
+// NWP-PRICE-007: Firecrawl wrapper. Runs with node:test (CI: node --test tests/pricing/*.test.js); no network calls.
+
+const { describe, test, mock } = require('node:test');
+const assert = require('node:assert/strict');
 const { createFirecrawlClient } = require('../../src/pricing/firecrawl-client');
 const { FIRECRAWL_ERROR_TYPES: E, isFirecrawlErrorType } = require('../../src/pricing/firecrawl-errors');
 
 const API_KEY = 'fc-test-key-123';
-const URL_OK = 'https://distributor.example.ph/products/er605';
+const URL_OK = 'https://distributor.example.ph/collections/omada';
 const SCHEMA = {
   type: 'object',
   properties: { sku: { type: 'string' }, price: { type: 'string' } },
@@ -18,41 +22,39 @@ function jsonResponse(status, body, headers = {}) {
   });
 }
 
-function scrapeBody({ json = { sku: 'ER605', price: '₱3,990.00' }, statusCode = 200, error = null, extra = {} } = {}) {
+function scrapeBody({ json = { sku: 'ER605', price: '₱3,990.00' }, statusCode = 200, error = null } = {}) {
   return {
     success: true,
-    data: { json, metadata: { sourceURL: URL_OK, statusCode, error }, ...extra },
+    data: { json, metadata: { sourceURL: URL_OK, statusCode, error } },
   };
 }
 
 function makeClient(responder, { apiKey = API_KEY } = {}) {
-  const fetchImpl = jest.fn(responder);
-  const getApiKey = jest.fn(async () => apiKey);
+  const fetchImpl = mock.fn(responder);
+  const getApiKey = mock.fn(async () => apiKey);
   const client = createFirecrawlClient({ fetchImpl, getApiKey, timeoutMarginMs: 0 });
   return { client, fetchImpl, getApiKey };
 }
 
 describe('scrapeProductPage: success', () => {
   test('returns the extracted JSON and sends a v2 JSON-format request', async () => {
-    const { client, fetchImpl } = makeClient(async () => jsonResponse(200, scrapeBody({ extra: {} })));
+    const { client, fetchImpl } = makeClient(async () => jsonResponse(200, scrapeBody()));
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result).toEqual({
+    assert.deepEqual(result, {
       ok: true,
       json: { sku: 'ER605', price: '₱3,990.00' },
       httpStatus: 200,
       targetStatusCode: 200,
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [calledUrl, init] = fetchImpl.mock.calls[0];
-    expect(calledUrl).toBe('https://api.firecrawl.dev/v2/scrape');
-    expect(init.method).toBe('POST');
-    expect(init.headers.Authorization).toBe(`Bearer ${API_KEY}`);
-
-    const sent = JSON.parse(init.body);
-    expect(sent).toEqual({
+    assert.equal(fetchImpl.mock.callCount(), 1);
+    const [calledUrl, init] = fetchImpl.mock.calls[0].arguments;
+    assert.equal(calledUrl, 'https://api.firecrawl.dev/v2/scrape');
+    assert.equal(init.method, 'POST');
+    assert.equal(init.headers.Authorization, `Bearer ${API_KEY}`);
+    assert.deepEqual(JSON.parse(init.body), {
       url: URL_OK,
       formats: [{ type: 'json', schema: SCHEMA }],
       onlyMainContent: true,
@@ -67,10 +69,10 @@ describe('scrapeProductPage: success', () => {
 
     await client.scrapeProductPage(URL_OK, { schema: SCHEMA, prompt: 'Extract the price.', pageTimeoutMs: 999999, country: 'SG' });
 
-    const sent = JSON.parse(fetchImpl.mock.calls[0][1].body);
-    expect(sent.formats).toEqual([{ type: 'json', schema: SCHEMA, prompt: 'Extract the price.' }]);
-    expect(sent.timeout).toBe(300000);
-    expect(sent.location).toEqual({ country: 'SG' });
+    const sent = JSON.parse(fetchImpl.mock.calls[0].arguments[1].body);
+    assert.deepEqual(sent.formats, [{ type: 'json', schema: SCHEMA, prompt: 'Extract the price.' }]);
+    assert.equal(sent.timeout, 300000);
+    assert.deepEqual(sent.location, { country: 'SG' });
   });
 
   test('reports creditsUsed when Firecrawl includes it', async () => {
@@ -80,7 +82,7 @@ describe('scrapeProductPage: success', () => {
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result.creditsUsed).toBe(5);
+    assert.equal(result.creditsUsed, 5);
   });
 });
 
@@ -90,27 +92,27 @@ describe('scrapeProductPage: input and configuration problems', () => {
 
     const result = await client.scrapeProductPage('ftp://distributor.example.ph/x', { schema: SCHEMA });
 
-    expect(result.ok).toBe(false);
-    expect(result.errorType).toBe(E.INVALID_URL);
-    expect(fetchImpl).toHaveBeenCalledTimes(0);
+    assert.equal(result.ok, false);
+    assert.equal(result.errorType, E.INVALID_URL);
+    assert.equal(fetchImpl.mock.callCount(), 0);
   });
 
   test('returns auth_error when the API key cannot be loaded', async () => {
-    const fetchImpl = jest.fn();
-    const getApiKey = jest.fn(async () => { throw new Error('Neither FIRECRAWL_SECRET_ARN nor FIRECRAWL_API_KEY is set.'); });
+    const fetchImpl = mock.fn();
+    const getApiKey = mock.fn(async () => { throw new Error('Neither FIRECRAWL_SECRET_ARN nor FIRECRAWL_API_KEY is set.'); });
     const client = createFirecrawlClient({ fetchImpl, getApiKey });
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result.errorType).toBe(E.AUTH_ERROR);
-    expect(result.message).toMatch(/FIRECRAWL_API_KEY/);
-    expect(fetchImpl).toHaveBeenCalledTimes(0);
+    assert.equal(result.errorType, E.AUTH_ERROR);
+    assert.match(result.message, /FIRECRAWL_API_KEY/);
+    assert.equal(fetchImpl.mock.callCount(), 0);
   });
 
   test('throws TypeError when neither schema nor prompt is given (programmer error)', async () => {
     const { client } = makeClient(async () => jsonResponse(200, scrapeBody()));
 
-    await expect(client.scrapeProductPage(URL_OK, {})).rejects.toThrow(TypeError);
+    await assert.rejects(client.scrapeProductPage(URL_OK, {}), TypeError);
   });
 });
 
@@ -127,26 +129,26 @@ describe('scrapeProductPage: Firecrawl HTTP errors', () => {
     [504, E.TIMEOUT],
   ];
 
-  cases.forEach(([status, expected]) => {
+  for (const [status, expected] of cases) {
     test(`HTTP ${status} maps to ${expected}`, async () => {
       const { client } = makeClient(async () => jsonResponse(status, { success: false, code: 'SOME_CODE', error: 'Something failed' }));
 
       const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-      expect(result.ok).toBe(false);
-      expect(result.errorType).toBe(expected);
-      expect(result.httpStatus).toBe(status);
-      expect(result.message).toBe('SOME_CODE: Something failed');
+      assert.equal(result.ok, false);
+      assert.equal(result.errorType, expected);
+      assert.equal(result.httpStatus, status);
+      assert.equal(result.message, 'SOME_CODE: Something failed');
     });
-  });
+  }
 
   test('429 carries Retry-After in seconds', async () => {
     const { client } = makeClient(async () => jsonResponse(429, { error: 'Rate limit exceeded' }, { 'Retry-After': '30' }));
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result.errorType).toBe(E.RATE_LIMITED);
-    expect(result.retryAfterSeconds).toBe(30);
+    assert.equal(result.errorType, E.RATE_LIMITED);
+    assert.equal(result.retryAfterSeconds, 30);
   });
 
   test('a non-JSON error body does not throw', async () => {
@@ -154,8 +156,8 @@ describe('scrapeProductPage: Firecrawl HTTP errors', () => {
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result.errorType).toBe(E.HTTP_ERROR);
-    expect(result.httpStatus).toBe(502);
+    assert.equal(result.errorType, E.HTTP_ERROR);
+    assert.equal(result.httpStatus, 502);
   });
 
   test('a 200 response with success:false is an http_error', async () => {
@@ -163,7 +165,7 @@ describe('scrapeProductPage: Firecrawl HTTP errors', () => {
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result.errorType).toBe(E.HTTP_ERROR);
+    assert.equal(result.errorType, E.HTTP_ERROR);
   });
 });
 
@@ -177,18 +179,18 @@ describe('scrapeProductPage: distributor site status', () => {
     [500, E.HTTP_ERROR],
   ];
 
-  cases.forEach(([statusCode, expected]) => {
+  for (const [statusCode, expected] of cases) {
     test(`target status ${statusCode} maps to ${expected}`, async () => {
       const { client } = makeClient(async () => jsonResponse(200, scrapeBody({ statusCode, error: 'Access denied' })));
 
       const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-      expect(result.ok).toBe(false);
-      expect(result.errorType).toBe(expected);
-      expect(result.targetStatusCode).toBe(statusCode);
-      expect(result.message).toContain(String(statusCode));
+      assert.equal(result.ok, false);
+      assert.equal(result.errorType, expected);
+      assert.equal(result.targetStatusCode, statusCode);
+      assert.ok(result.message.includes(String(statusCode)));
     });
-  });
+  }
 });
 
 describe('scrapeProductPage: empty extraction', () => {
@@ -200,7 +202,7 @@ describe('scrapeProductPage: empty extraction', () => {
     ['array instead of object', ['ER605']],
   ];
 
-  emptyCases.forEach(([label, json]) => {
+  for (const [label, json] of emptyCases) {
     test(`${label} is empty_content`, async () => {
       const body = scrapeBody();
       body.data.json = json;
@@ -208,17 +210,27 @@ describe('scrapeProductPage: empty extraction', () => {
 
       const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-      expect(result.errorType).toBe(E.EMPTY_CONTENT);
+      assert.equal(result.errorType, E.EMPTY_CONTENT);
     });
-  });
+  }
 
   test('partial values are still returned (validation happens in NWP-PRICE-003)', async () => {
     const { client } = makeClient(async () => jsonResponse(200, scrapeBody({ json: { sku: 'ER605', price: null } })));
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result.ok).toBe(true);
-    expect(result.json).toEqual({ sku: 'ER605', price: null });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.json, { sku: 'ER605', price: null });
+  });
+
+  test('a listing-page result (array of products) is returned as is', async () => {
+    const products = { products: [{ sku: 'ER605', price: '₱3,990' }, { sku: 'EAP610', price: '₱3,450' }] };
+    const { client } = makeClient(async () => jsonResponse(200, scrapeBody({ json: products })));
+
+    const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.json, products);
   });
 });
 
@@ -232,7 +244,7 @@ describe('scrapeProductPage: transport failures', () => {
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result.errorType).toBe(E.TIMEOUT);
+    assert.equal(result.errorType, E.TIMEOUT);
   });
 
   test('the client aborts when Firecrawl does not answer in time', async () => {
@@ -246,7 +258,7 @@ describe('scrapeProductPage: transport failures', () => {
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA, pageTimeoutMs: 1000 });
 
-    expect(result.errorType).toBe(E.TIMEOUT);
+    assert.equal(result.errorType, E.TIMEOUT);
   });
 
   test('a connection failure is a network_error', async () => {
@@ -258,8 +270,8 @@ describe('scrapeProductPage: transport failures', () => {
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result.errorType).toBe(E.NETWORK_ERROR);
-    expect(result.message).toContain('ENOTFOUND');
+    assert.equal(result.errorType, E.NETWORK_ERROR);
+    assert.ok(result.message.includes('ENOTFOUND'));
   });
 });
 
@@ -269,8 +281,8 @@ describe('scrapeProductPage: safety', () => {
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result.message).not.toContain(API_KEY);
-    expect(result.message).toContain('[redacted]');
+    assert.ok(!result.message.includes(API_KEY));
+    assert.ok(result.message.includes('[redacted]'));
   });
 
   test('long error messages are truncated', async () => {
@@ -278,16 +290,15 @@ describe('scrapeProductPage: safety', () => {
 
     const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
 
-    expect(result.message.length).toBeLessThan(600);
+    assert.ok(result.message.length < 600);
   });
 
   test('every failure uses a known error type', async () => {
-    const statuses = [400, 401, 402, 403, 408, 429, 500, 504];
-    for (const status of statuses) {
+    for (const status of [400, 401, 402, 403, 408, 429, 500, 504]) {
       const { client } = makeClient(async () => jsonResponse(status, { success: false }));
       // eslint-disable-next-line no-await-in-loop
       const result = await client.scrapeProductPage(URL_OK, { schema: SCHEMA });
-      expect(isFirecrawlErrorType(result.errorType)).toBe(true);
+      assert.equal(isFirecrawlErrorType(result.errorType), true, `HTTP ${status}`);
     }
   });
 });
