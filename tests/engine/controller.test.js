@@ -1,9 +1,9 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createCtx } = require('../../../src/types/engine/ctx.js');
-const params = require('../../../src/types/engine/params.js');
-const { validateSelectionResult, validateCatalogSku } = require('../../../src/types/engine/contracts.js');
+const { createCtx } = require('../../src/types/engine/ctx.js');
+const params = require('../../src/types/engine/params.js');
+const { validateSelectionResult, validateCatalogSku } = require('../../src/types/engine/contracts.js');
 const {
   countManagedDevices,
   integratedControllerCheck,
@@ -11,10 +11,10 @@ const {
   collectControllerCandidates,
   controllerFits,
   FLAG_CODES,
-} = require('../../../src/types/engine/devices/controller.js');
+} = require('../../src/types/engine/devices/controller.js');
 const {
   controller, gateway, accessPoint, switchRow, integratedGateway, counts, items, deepFreeze, clone,
-} = require('../../fixtures/e18-fixtures.js');
+} = require('../fixtures/e18-fixtures.js');
 
 const select = (plan, c, catalog, vendor = 'V') => {
   const ctx = createCtx();

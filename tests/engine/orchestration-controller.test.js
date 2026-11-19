@@ -5,6 +5,8 @@
 // default vendor) are replaced by stubs in require.cache before orchestration.js is loaded, so this file tests only
 // the controller step and how its result reaches plan.items, plan.unmet, plan.flags and plan.complete.
 // The controller module, select.js, ctx.js, params.js and contracts.js are the real ones.
+// The stubs are resolved without file extensions, exactly as orchestration.js requires them, so they also work
+// when a module is a folder (for example bom/index.js).
 // node:test runs each test file in its own process, so the stubs do not leak into other test files.
 
 const test = require('node:test');
@@ -18,21 +20,21 @@ const stub = (relative, exports) => {
 };
 
 const ENCLOSURE = { sku: 'ENC', vendor: 'V' };
-stub('devices/gateway.js', { selectGateway: () => { throw new Error('stubbed per test'); } });
-stub('devices/aps.js', { selectAccessPoints: () => { throw new Error('stubbed per test'); } });
-stub('devices/poe.js', { computePoeBudget: () => ({ perFloor: [{ budgetW: 10 }] }) });
-stub('devices/switches.js', { selectSwitches: () => { throw new Error('stubbed per test'); } });
-stub('devices/enclosure.js', {
+stub('devices/gateway', { selectGateway: () => { throw new Error('stubbed per test'); } });
+stub('devices/aps', { selectAccessPoints: () => { throw new Error('stubbed per test'); } });
+stub('devices/poe', { computePoeBudget: () => ({ perFloor: [{ budgetW: 10 }] }) });
+stub('devices/switches', { selectSwitches: () => { throw new Error('stubbed per test'); } });
+stub('devices/enclosure', {
   computeRequiredRackUnits: () => ({ requiredU: 0 }),
   resolveHousingType: () => 'closet',
   chooseEnclosure: () => ({ ok: true, sku: ENCLOSURE, qty: 0, flags: [] }),
 });
-stub('devices/power.js', { buildPowerProtection: () => ({}) });
-stub('devices/optics.js', { planOptics: () => null });
-stub('bom.js', { buildBom: () => { throw new Error('not used'); }, buildInstallationMaterials: () => ({}) });
-stub('steps/assemble.js', { assemblePlan: (plan) => plan, combineAssembledPlans: () => ({}) });
-stub('lifecycle.js', { noCurrentModelUnmet: (category, vendor) => ({ unmet: { category, vendor, reason: 'no current model' } }) });
-stub('default-vendor.js', { selectDefaultVendors: () => ({ CE: null, HP: null }) });
+stub('devices/power', { buildPowerProtection: () => ({}) });
+stub('devices/optics', { planOptics: () => null });
+stub('bom', { buildBom: () => { throw new Error('not used'); }, buildInstallationMaterials: () => ({}) });
+stub('steps/assemble', { assemblePlan: (plan) => plan, combineAssembledPlans: () => ({}) });
+stub('lifecycle', { noCurrentModelUnmet: (category, vendor) => ({ unmet: { category, vendor, reason: 'no current model' } }) });
+stub('default-vendor', { selectDefaultVendors: () => ({ CE: null, HP: null }) });
 
 const { buildPlan } = require('../../src/types/engine/orchestration.js');
 const { createCtx } = require('../../src/types/engine/ctx.js');
