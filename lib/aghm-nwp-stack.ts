@@ -162,6 +162,36 @@ export class AghmNwpStack extends cdk.Stack {
       engineMachine.grantStartSyncExecution(entryFn);
 
 
+    // 1c. BACKEND: Price updater (NWP-PRICE-010)
+    // Same subnets and security group as the engine Lambdas (vpcProps). Those subnets' route table sends
+    // 0.0.0.0/0 to the fck-nat instance, so the function reaches Firecrawl whenever fck-nat is running; it
+    // needs no NAT setting of its own. The weekly workflow that invokes it is NWP-PRICE-011.
+
+    // Created once by hand so the key never appears in code or templates:
+    //   aws secretsmanager create-secret --name aghm-nwp/firecrawl --secret-string file://firecrawl-key.txt
+    const firecrawlSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      'FirecrawlApiKeySecret',
+      'aghm-nwp/firecrawl',
+    );
+
+    const priceUpdaterFn = new lambdaNodejs.NodejsFunction(this, 'PriceUpdaterFunction', {
+      ...vpcProps,
+      entry: path.join(repositoryRoot, 'src', 'pricing', 'handler.js'),
+      timeout: cdk.Duration.minutes(15),   // one vendor x distributor batch per call; Lambda's maximum. Revisit after a real run.
+      memorySize: 512,                     // waits on Firecrawl over the network; little CPU or memory needed
+      environment: {
+        ...databaseEnvironment,
+        FIRECRAWL_SECRET_ARN: firecrawlSecret.secretArn,
+        FIRECRAWL_CONCURRENCY: '2',        // TODO: set from the Firecrawl plan's concurrent-request limit (NWP-PRICE-007)
+        PRICE_MEDIAN_INCLUDE_STALE: 'false',
+      },
+      logGroup: makeLogGroup('PriceUpdaterLogs'),
+    });
+    databaseSecret.grantRead(priceUpdaterFn);
+    firecrawlSecret.grantRead(priceUpdaterFn);
+
+
     // 1a. BACKEND: API Gateway routes requests to the active engine handler.
 
     const httpApi = new apigwv2.HttpApi(this, 'NwpHttpApi', {
@@ -185,12 +215,10 @@ export class AghmNwpStack extends cdk.Stack {
     });
 
 
-    // 1b. BACKEND: EventBridge schedule (triggers pricingUpdateLambda)
+    // 1b. BACKEND: EventBridge schedule (triggers the price sync)
 
-    // Depends on pricingUpdateLambda above — stays disabled until that's active.
-    // TODO: cadence still unresolved — FR doc says "weekly", team discussion
-    // said "daily 2am". Confirm actual cadence before uncommenting; the
-    // schedule expression below is a placeholder (daily 2am UTC) only.
+    // Placeholder only. NWP-PRICE-011 replaces it with a weekly EventBridge Scheduler schedule (the manuscript
+    // says weekly) that starts the sync workflow, which in turn invokes priceUpdaterFn (section 1c).
 
     // const pricingUpdateRule = new events.Rule(this, 'PricingUpdateSchedule', {
     //   schedule: events.Schedule.cron({ minute: '0', hour: '2' }),
@@ -215,9 +243,7 @@ export class AghmNwpStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'EntryFunctionName', { value: entryFn.functionName });
     new cdk.CfnOutput(this, 'StateMachineArn', { value: engineMachine.stateMachineArn });
 
-    /* new cdk.CfnOutput(this, 'PricingUpdateFunctionName', {
-      value: pricingUpdateLambda.functionName,
-    }); */
+    new cdk.CfnOutput(this, 'PriceUpdaterFunctionName', { value: priceUpdaterFn.functionName });
 
     // Re-enable alongside the API Gateway above once it's active.
     new cdk.CfnOutput(this, 'ApiUrl', {
