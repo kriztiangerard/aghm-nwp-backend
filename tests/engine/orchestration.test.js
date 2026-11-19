@@ -2466,9 +2466,9 @@ test('AC7 calls controller selection after counting selected devices and adds th
     },
   );
 
-  assert.deepEqual(calls, [
-    'integratedControllerCheck',
+    assert.deepEqual(calls, [
     'countManagedDevices',
+    'integratedControllerCheck',
     'selectController',
   ]);
   assert.ok(
@@ -2510,16 +2510,14 @@ test('AC7 skips separate controller selection when the gateway has an integrated
         flags: [],
       }),
       controller: {
-        integratedControllerCheck: (selectedGateway, receivedCtx) => {
+        integratedControllerCheck: (selectedGateway, receivedCtx, counts) => {
           assert.strictEqual(selectedGateway, gatewaySku);
           assert.strictEqual(receivedCtx, ctx);
 
           const controllerStep = require('../../src/types/engine/devices/controller');
-          return controllerStep.integratedControllerCheck(selectedGateway, receivedCtx);
+          return controllerStep.integratedControllerCheck(selectedGateway, receivedCtx, counts);
         },
-        countManagedDevices: () => {
-          throw new Error('Must not count devices for an integrated controller.');
-        },
+        countManagedDevices: () => ({ aps: 0, switches: 0, gateways: 1 }),
         selectController: () => {
           controllerSelectionCalls += 1;
           throw new Error('Must not select a separate controller.');
@@ -2625,7 +2623,7 @@ test('AC6 records controller unmet against the plan vendor and marks the plan in
       (item) =>
         item.category === 'controller' &&
         item.vendor === vendor.name &&
-        item.reason === 'controller selection not implemented yet',
+        item.reason === `No controller in the catalog for ${vendor.name}.`,
     ),
   );
 });

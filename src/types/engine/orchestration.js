@@ -429,11 +429,13 @@ function buildPlan(vendor, planType, reqs, input, catalog, ctx, steps = {}) {
   }
 
     // NWP-ENGINE-015 AC7: controller step. Selection logic lives in NWP-ENGINE-018.
+    // NWP-ENGINE-018: the managed-device counts come from plan.items (gateway, APs and switches are already in it),
+    // and are needed by both the integrated-controller capacity check and the standalone selection.
   if (vendor.needController && gatewayResult.ok) {
     const controller = steps.controller || controllerStep;
+    const counts = controller.countManagedDevices(plan.items);
 
-    if (!controller.integratedControllerCheck(gatewayResult.sku, ctx)) {
-      const counts = controller.countManagedDevices(plan.items);
+    if (!controller.integratedControllerCheck(gatewayResult.sku, ctx, counts)) {
       const controllerResult = controller.selectController(
         vendor.name, planType, counts, catalog, ctx,
       );
