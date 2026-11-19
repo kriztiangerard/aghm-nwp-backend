@@ -25,38 +25,55 @@ const sources: DistributorSource[] = [
   },
 
   // TP-Link Omada
+  // NorthCircuit home page replaced (2026-11-19): Villman lists TP-Link by category with prices.
   {
     vendorName: "TP-Link Omada",
-    distributorName: "NorthCircuit",
-    sourceUrl: "https://northcircuit.ph/",
+    distributorName: "Villman Computers",
+    sourceUrl: "https://villman.com/Category-Brand/Network-Switches/TP-Link",
+  },
+  {
+    vendorName: "TP-Link Omada",
+    distributorName: "Villman Computers",
+    sourceUrl: "https://villman.com/Category-Brand/Access-Points/TP-Link",
+  },
+  {
+    vendorName: "TP-Link Omada",
+    distributorName: "Villman Computers",
+    sourceUrl: "https://villman.com/Category-Brand/Broadband-Routers/TP-Link",
   },
   {
     vendorName: "TP-Link Omada",
     distributorName: "PC Express",
     sourceUrl: "https://pcx.com.ph/collections/vendors?q=tp-link",
   },
+  // Kept on purpose (2026-11-19) as the demonstration source: marketplace store pages are heavily
+  // bot-protected, so this scrape is expected to fail every week. It shows (a) Firecrawl failing on a
+  // protected site without any CAPTCHA bypass, and (b) Omada prices still coming from the sources above.
+  // It never stores a price, so it never marks a device stale or counts toward manual review; its
+  // failures appear in the per-page sync log (NWP-PRICE-004). It does spend Firecrawl credits each run.
   {
     vendorName: "TP-Link Omada",
     distributorName: "TP-Link Official Store (Shopee)",
     sourceUrl: "https://shopee.ph/tplink.philippines",
   },
+  // TODO third working Omada distributor: candidates with priced Omada items are TTI (shop.tti.com.ph)
+  // and PCWorx (pcworx.ph); confirm a listing-page URL in a browser before adding it here.
 
   // Ubiquiti UniFi
+  // NorthCircuit home page replaced (2026-11-19): PC Express lists Ubiquiti with prices.
   {
     vendorName: "Ubiquiti UniFi",
-    distributorName: "NorthCircuit",
-    sourceUrl: "https://northcircuit.ph/",
+    distributorName: "PC Express",
+    sourceUrl: "https://pcx.com.ph/collections/vendors?q=Ubiquiti",
   },
   {
     vendorName: "Ubiquiti UniFi",
     distributorName: "MEC Networks",
     sourceUrl: "https://mec.ph/products/wireless/ubiquiti/",
   },
-  {
-    vendorName: "Ubiquiti UniFi",
-    distributorName: "Ubiquiti Official Store (LazMall)",
-    sourceUrl: "https://www.lazada.com.ph/shop/ubiquiti/?path=index.htm",
-  },
+  // Ubiquiti Official Store (LazMall) removed (2026-11-19): marketplace store pages are heavily bot-protected.
+  // TODO third UniFi distributor: PCWorx (pcworx.ph) sells UniFi with listed prices; confirm a
+  // Ubiquiti listing-page URL in a browser before adding it here.
 
   // Ruijie
   {
@@ -69,10 +86,11 @@ const sources: DistributorSource[] = [
     distributorName: "Ronisys",
     sourceUrl: "https://www.ronisys.ph/portfolio-cat/reyee-networks/",
   },
+  // Technosure PH home page replaced (2026-11-19): DataBlitz lists Reyee with prices (shared with ASUS).
   {
     vendorName: "Ruijie",
-    distributorName: "Technosure PH",
-    sourceUrl: "https://technosureph.com/",
+    distributorName: "DataBlitz",
+    sourceUrl: "https://ecommerce.datablitz.com.ph/collections/reyee-by-ruijie-asus-router",
   },
 
   // Grandstream GWN Cloud
@@ -98,10 +116,11 @@ const sources: DistributorSource[] = [
     distributorName: "InfoBahn",
     sourceUrl: "https://shop.ibahn.net.ph/collections/cisco-switches",
   },
+  // IMV home page replaced (2026-11-19): PC Express lists Cisco Business with prices.
   {
     vendorName: "Cisco Business",
-    distributorName: "International Micro Village, Inc. (IMV)",
-    sourceUrl: "https://www.imvphil.com/",
+    distributorName: "PC Express",
+    sourceUrl: "https://pcx.com.ph/collections/active/cisco-business",
   },
   {
     vendorName: "Cisco Business",
