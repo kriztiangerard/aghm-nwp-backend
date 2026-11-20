@@ -130,6 +130,13 @@ BEGIN
       v_device_id, v_distributor_id, NULL, item.price, v_now, false, 0, false
     );
   END LOOP;
+
+  -- NWP-PRICE-009: once 004_pricing_sync_schema.sql has made pricing_id an IDENTITY column, the explicit
+  -- ids above do not advance its sequence. Move it past them so later default inserts do not collide.
+  -- (Does nothing on a database where 004 has not run yet.)
+  IF pg_get_serial_sequence('public.pricing', 'pricing_id') IS NOT NULL THEN
+    PERFORM setval(pg_get_serial_sequence('public.pricing', 'pricing_id'), (SELECT COALESCE(MAX(pricing_id), 1) FROM pricing));
+  END IF;
 END $$;
 
 -- ---------------------------------------------------------------------------------------------------------------

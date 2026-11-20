@@ -47,12 +47,8 @@ export async function registerDistributorSource(
 
     const vendorResult = await client.query(
       `
-      INSERT INTO vendor (vendor_id, name, need_controller)
-      VALUES (
-        (SELECT COALESCE(MAX(vendor_id), 0) + 1 FROM vendor),
-        $1,
-        FALSE
-      )
+      INSERT INTO vendor (name, need_controller)
+      VALUES ($1, FALSE)
       ON CONFLICT (name)
       DO UPDATE SET name = EXCLUDED.name
       RETURNING vendor_id, name
@@ -64,11 +60,8 @@ export async function registerDistributorSource(
 
     const distributorResult = await client.query(
       `
-      INSERT INTO distributor (distributor_id, name)
-      VALUES (
-        (SELECT COALESCE(MAX(distributor_id), 0) + 1 FROM distributor),
-        $1
-      )
+      INSERT INTO distributor (name)
+      VALUES ($1)
       ON CONFLICT DO NOTHING
       RETURNING distributor_id, name
       `,
@@ -93,19 +86,12 @@ export async function registerDistributorSource(
     const sourceResult = await client.query(
       `
       INSERT INTO pricing_source (
-        source_id,
         vendor_id,
         distributor_id,
         source_url,
         is_active
       )
-      VALUES (
-        (SELECT COALESCE(MAX(source_id), 0) + 1 FROM pricing_source),
-        $1,
-        $2,
-        $3,
-        $4
-      )
+      VALUES ($1, $2, $3, $4)
       RETURNING source_id, source_url, is_active
       `,
       [
