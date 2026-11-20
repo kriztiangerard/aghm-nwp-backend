@@ -1,34 +1,42 @@
 'use strict';
 
-// NWP-PRICE-002: collects prices for one batch, i.e. every active listing page of ONE vendor and ONE
+// NWP-PRICE-002 / 004: collects prices for one batch, i.e. every active listing page of ONE vendor and ONE
 // distributor (the `process` action of the Price updater).
 //
 //   1. Load the vendor's catalog as a SKU index. A vendor with no devices is skipped without scraping,
 //      so no Firecrawl credits are spent on it.
 //   2. Scrape every page with Firecrawl's JSON extraction (LISTING_SCHEMA), at most `concurrency` at once.
-//      A page with no product list is `empty_content`.
+//      Each page is isolated (004): a failure is recorded for that page and the others continue.
+//        - `timeout` and `rate_limited` are retried once after a short backoff; nothing else is retried.
+//        - An account-level error (auth_error, quota_exceeded, network_error) stops the batch: pages not
+//          yet started are skipped and the summary carries `stoppedBy`, so the workflow stops (NWP-PRICE-011).
+//        - No products array is `invalid_response`; an empty list is `empty_content`.
 //   3. Normalize each page (normalizeListing, NWP-PRICE-003).
 //   4. Combine the pages: a device found on two pages at different prices is stored from neither
 //      (the same rule normalizeListing applies within one page).
 //   5. Store each found device in its own transaction: upsertSynchronizedPrice() then markSyncSuccess().
-//   6. Return a summary for NWP-PRICE-004 (outcome per device) and the finalize step (NWP-PRICE-011).
+//      A database error rolls back only that device and is reported as `db_error` (004).
+//   6. Return a summary; recordBatchOutcome() (outcome.js, 004) turns it into one update_log row per device.
 //
-// Not here, by design: retries, stopping on account-level errors, update_log rows and marking prices stale
-// are NWP-PRICE-004/005. A failed page simply appears in `pages` with its error type. The scraper never
-// follows links: a store that spreads a vendor over several pages has one source row per page URL.
+// One structured log line is written per page, so failures of pages with no attributed devices are visible.
+// The scraper never follows links: a store that spreads a vendor over several pages has one source per page URL.
 
 const { scrapeProductPage } = require('./firecrawl-client');
-const { FIRECRAWL_ERROR_TYPES: E } = require('./firecrawl-errors');
 const { LISTING_SCHEMA, readProducts } = require('./extraction');
 const { normalizeListing, NORMALIZE_REJECT_REASONS } = require('./normalize-record');
 const { loadVendorSkuIndex } = require('./sources');
 const { upsertSynchronizedPrice } = require('./price-store');
+const { SYNC_STATUS, RETRYABLE, ACCOUNT_LEVEL, fromFirecrawlError } = require('./sync-status');
 const db = require('./db');
 
 const PAGE_STATUS = Object.freeze({
-  SUCCESS: 'success',   // scraped and normalized (failures use FIRECRAWL_ERROR_TYPES values)
-  SKIPPED: 'skipped',   // not scraped: the vendor has no catalog devices
+  SUCCESS: SYNC_STATUS.SUCCESS, // scraped and normalized (failures use SYNC_STATUS values)
+  SKIPPED: 'skipped',           // not scraped: no catalog devices, or the batch stopped first
 });
+
+const DEFAULT_RETRY_DELAY_MS = 2000;   // timeout: a short pause before the one retry
+const DEFAULT_RATE_LIMIT_DELAY_MS = 5000;
+const MAX_RETRY_DELAY_MS = 30000;      // never wait longer than this, whatever Retry-After says
 
 class InvalidBatchError extends Error {
   constructor(message) {
@@ -80,47 +88,83 @@ async function mapWithConcurrency(items, limit, worker) {
   return results;
 }
 
-async function scrapePage(source, ctx) {
-  const retrievedAt = ctx.now();
-  const result = await ctx.scrape(source.sourceUrl, { schema: LISTING_SCHEMA });
-  const base = { sourceId: source.sourceId };
-  if (result && Number.isFinite(result.creditsUsed)) base.creditsUsed = result.creditsUsed;
+/** Backoff before the one retry: Retry-After when given (capped), otherwise a fixed short pause. */
+function retryDelayMs(result) {
+  if (result.errorType === SYNC_STATUS.RATE_LIMITED) {
+    return Number.isFinite(result.retryAfterSeconds)
+      ? Math.min(MAX_RETRY_DELAY_MS, Math.max(0, result.retryAfterSeconds * 1000))
+      : DEFAULT_RATE_LIMIT_DELAY_MS;
+  }
+  return DEFAULT_RETRY_DELAY_MS;
+}
 
-  if (!result || result.ok !== true) {
-    return {
-      page: { ...base, status: result && result.errorType ? result.errorType : E.HTTP_ERROR, productCount: 0,
-        message: result && result.message ? result.message : 'Scrape failed without details.' },
-      listing: null,
-    };
+/** One scrape plus at most one retry for timeout / rate_limited. Never throws for scrape failures. */
+async function scrapeWithRetry(url, ctx) {
+  let result = await ctx.scrape(url, { schema: LISTING_SCHEMA });
+  let attempts = 1;
+  if (result && result.ok !== true && RETRYABLE.has(result.errorType)) {
+    await ctx.sleep(retryDelayMs(result));
+    result = await ctx.scrape(url, { schema: LISTING_SCHEMA });
+    attempts = 2;
+  }
+  return { result, attempts };
+}
+
+function failedPage(sourceId, status, message, extra = {}) {
+  return { page: { sourceId, status, productCount: 0, ...extra, message }, listing: null };
+}
+
+async function processPage(source, ctx) {
+  const { sourceId } = source;
+  if (ctx.stoppedBy) {
+    return failedPage(sourceId, PAGE_STATUS.SKIPPED, `Not scraped: the batch stopped after ${ctx.stoppedBy.status}.`);
   }
 
-  const products = readProducts(result.json);
-  if (products === null || products.length === 0) {
-    return {
-      page: { ...base, status: E.EMPTY_CONTENT, productCount: 0,
-        message: products === null ? 'The extracted JSON has no products array.' : 'The page listed no products.' },
-      listing: null,
-    };
-  }
+  try {
+    const retrievedAt = ctx.now();
+    const { result, attempts } = await scrapeWithRetry(source.sourceUrl, ctx);
+    const base = { attempts };
+    if (result && Number.isFinite(result.creditsUsed)) base.creditsUsed = result.creditsUsed;
 
-  const listing = normalizeListing(
-    products,
-    { sourceId: source.sourceId, vendorId: ctx.vendorId, distributorId: ctx.distributorId },
-    ctx.skuIndex,
-    retrievedAt,
-  );
-  const deviceRejections = listing.rejected.filter((r) => Number.isInteger(r.deviceId));
-  return {
-    page: {
-      ...base,
-      status: PAGE_STATUS.SUCCESS,
-      productCount: products.length,
-      matched: listing.records.length + deviceRejections.length,
-      unmatched: listing.unmatched,
-      rejectedWithoutDevice: listing.rejected.length - deviceRejections.length,
-    },
-    listing,
-  };
+    if (!result || result.ok !== true) {
+      const status = fromFirecrawlError(result && result.errorType);
+      const message = result && result.message ? result.message : 'Scrape failed without details.';
+      if (ACCOUNT_LEVEL.has(status) && !ctx.stoppedBy) ctx.stoppedBy = { status, sourceId, message };
+      return failedPage(sourceId, status, message, base);
+    }
+
+    const products = readProducts(result.json);
+    if (products === null) {
+      return failedPage(sourceId, SYNC_STATUS.INVALID_RESPONSE, 'The extracted JSON has no products array.', base);
+    }
+    if (products.length === 0) {
+      return failedPage(sourceId, SYNC_STATUS.EMPTY_CONTENT, 'The page listed no products.', base);
+    }
+
+    const listing = normalizeListing(
+      products,
+      { sourceId, vendorId: ctx.vendorId, distributorId: ctx.distributorId },
+      ctx.skuIndex,
+      retrievedAt,
+    );
+    const deviceRejections = listing.rejected.filter((r) => Number.isInteger(r.deviceId));
+    return {
+      page: {
+        sourceId,
+        status: PAGE_STATUS.SUCCESS,
+        productCount: products.length,
+        matched: listing.records.length + deviceRejections.length,
+        unmatched: listing.unmatched,
+        rejectedWithoutDevice: listing.rejected.length - deviceRejections.length,
+        ...base,
+      },
+      listing,
+    };
+  } catch (error) {
+    // A bug or an unexpected exception: isolate it to this page.
+    return failedPage(sourceId, SYNC_STATUS.UNEXPECTED_ERROR,
+      `Unexpected error while processing the page: ${error && error.message ? error.message : String(error)}`);
+  }
 }
 
 /**
@@ -170,8 +214,17 @@ function combinePages(listings) {
   return { toStore, rejected };
 }
 
+function logPage(logger, runAt, page) {
+  logger.log(JSON.stringify({
+    source: 'price-updater', event: 'page', runAt,
+    sourceId: page.sourceId, status: page.status, productCount: page.productCount,
+    matched: page.matched !== undefined ? page.matched : 0,
+    attempts: page.attempts !== undefined ? page.attempts : 0,
+  }));
+}
+
 /**
- * The `process` action.
+ * The `process` action's collection step.
  *
  * @param {{ runAt: string, vendorId: number, distributorId: number,
  *           sources: Array<{ sourceId: number, sourceUrl: string }> }} input
@@ -183,6 +236,8 @@ function combinePages(listings) {
  * @param {Function} [deps.upsertPrice]      upsertSynchronizedPrice(client, record)
  * @param {Function} [deps.markSyncSuccess]  async (client, { deviceId, distributorId }); NWP-PRICE-005
  * @param {Function} [deps.now]              () => Date, the retrieval time of each page
+ * @param {Function} [deps.sleep]            async (ms), the retry backoff
+ * @param {{ log: Function }} [deps.logger]  default: console
  * @returns {Promise<BatchSummary>}
  */
 async function processSourceBatch(input, {
@@ -195,9 +250,14 @@ async function processSourceBatch(input, {
   // changes only the price, source and retrieval time.
   markSyncSuccess = async () => {},
   now = () => new Date(),
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  logger = console,
 } = {}) {
   const { runAt, vendorId, distributorId, sources } = validateBatch(input);
-  const summary = { runAt, vendorId, distributorId, pages: [], found: [], rejected: [], stored: { inserted: 0, updated: 0 } };
+  const summary = {
+    runAt, vendorId, distributorId,
+    pages: [], found: [], rejected: [], dbErrors: [], stored: { inserted: 0, updated: 0 }, stoppedBy: null,
+  };
 
   const skuIndex = await loadSkuIndex(vendorId);
   if (skuIndex.size === 0) {
@@ -205,27 +265,37 @@ async function processSourceBatch(input, {
       sourceId: s.sourceId, status: PAGE_STATUS.SKIPPED, productCount: 0,
       message: 'The vendor has no catalog devices, so the page was not scraped.',
     }));
+    summary.pages.forEach((page) => logPage(logger, runAt, page));
     return summary;
   }
 
-  const ctx = { scrape, now, vendorId, distributorId, skuIndex };
-  const results = await mapWithConcurrency(sources, concurrency, (source) => scrapePage(source, ctx));
+  const ctx = { scrape, sleep, now, vendorId, distributorId, skuIndex, stoppedBy: null };
+  const results = await mapWithConcurrency(sources, concurrency, (source) => processPage(source, ctx));
   summary.pages = results.map((r) => r.page);
+  summary.stoppedBy = ctx.stoppedBy;
+  summary.pages.forEach((page) => logPage(logger, runAt, page));
 
   const { toStore, rejected } = combinePages(results.map((r) => r.listing));
   summary.rejected = rejected;
 
   for (const record of toStore) {
-    // One transaction per device, so one device's write never rolls back another's.
-    // eslint-disable-next-line no-await-in-loop
-    const { inserted } = await withTransaction(async (client) => {
-      const stored = await upsertPrice(client, record);
-      await markSyncSuccess(client, { deviceId: record.deviceId, distributorId: record.distributorId });
-      return stored;
-    });
-    summary.found.push(record.deviceId);
-    if (inserted) summary.stored.inserted += 1;
-    else summary.stored.updated += 1;
+    // One transaction per device, so one device's failure never rolls back another's.
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const { inserted } = await withTransaction(async (client) => {
+        const stored = await upsertPrice(client, record);
+        await markSyncSuccess(client, { deviceId: record.deviceId, distributorId: record.distributorId });
+        return stored;
+      });
+      summary.found.push(record.deviceId);
+      if (inserted) summary.stored.inserted += 1;
+      else summary.stored.updated += 1;
+    } catch (error) {
+      summary.dbErrors.push({
+        deviceId: record.deviceId,
+        detail: `Storing the price failed: ${error && error.message ? error.message : String(error)}`,
+      });
+    }
   }
 
   return summary;
@@ -237,16 +307,21 @@ async function processSourceBatch(input, {
  * @property {number} vendorId
  * @property {number} distributorId
  * @property {Array<{ sourceId: number, status: string, productCount: number, matched?: number,
- *   unmatched?: number, rejectedWithoutDevice?: number, message?: string, creditsUsed?: number }>} pages
+ *   unmatched?: number, rejectedWithoutDevice?: number, attempts?: number, message?: string,
+ *   creditsUsed?: number }>} pages
  * @property {number[]} found      devices stored with a new price, ascending
- * @property {Array<{ deviceId: number, reason: string, detail: string }>} rejected  devices found but not stored
+ * @property {Array<{ deviceId: number, reason: string, detail: string }>} rejected  found but not usable
+ * @property {Array<{ deviceId: number, detail: string }>} dbErrors  found, but storing failed
  * @property {{ inserted: number, updated: number }} stored
+ * @property {{ status: string, sourceId: number, message: string } | null} stoppedBy  account-level stop
  */
 
 module.exports = {
   processSourceBatch,
   combinePages,
   mapWithConcurrency,
+  retryDelayMs,
   InvalidBatchError,
   PAGE_STATUS,
+  MAX_RETRY_DELAY_MS,
 };

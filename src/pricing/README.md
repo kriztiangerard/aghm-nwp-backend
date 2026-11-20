@@ -9,7 +9,9 @@ Tests are in `tests/pricing/` and run with `node --test tests/pricing/*.test.js`
 | File | Story | Purpose |
 | --- | --- | --- |
 | `handler.js` | 010 | Lambda entry point. Dispatches on `event.action`: `probe`, `plan`, `process`, `markBatchFailed`, `finalize`. Actions not built yet throw `NotImplementedError` naming their story. |
-| `collect.js` | 002 | `processSourceBatch()`: the `process` action. Scrapes one batch, combines its pages, stores found prices, returns a summary. |
+| `collect.js` | 002, 004 | `processSourceBatch()`: the `process` action's collection step. Scrapes one batch (with retry and failure isolation), combines its pages, stores found prices, returns a summary. |
+| `outcome.js` | 004 | `recordBatchOutcome()` (one `update_log` row per device), `attributeOutcomes()`, `loadTrackedRows()`, `getRunResult()`. |
+| `sync-status.js` | 004 | `SYNC_STATUS`: the one list of outcomes for pages, devices and `update_log.status`; `RETRYABLE`, `ACCOUNT_LEVEL`. |
 | `extraction.js` | 002 | `LISTING_SCHEMA`, the Firecrawl JSON schema for a listing page (`{ products: [{ sku, name, price }] }`), and `readProducts()`. |
 | `sources.js` | 002 | `listActiveSources()` and `loadVendorSkuIndex()`. |
 | `price-store.js` | 002 | `upsertSynchronizedPrice()`: one `pricing` row per device and distributor; replaces a manual row. |
@@ -96,24 +98,23 @@ A **batch** is every active source of one vendor and one distributor, so all of 
 ### Steps
 
 1. **Catalog check:** the vendor's devices become a SKU index. A vendor with no devices is skipped without scraping (pages report `skipped`), so it costs no credits.
-2. **Scrape:** each page is scraped with `LISTING_SCHEMA`, at most `FIRECRAWL_CONCURRENCY` at once. A page with no product list is `empty_content`; a failed page reports its Firecrawl error type.
+2. **Scrape:** each page is scraped with `LISTING_SCHEMA`, at most `FIRECRAWL_CONCURRENCY` at once. A failed page reports its error type and the others continue (see Failure handling). No products array is `invalid_response`; an empty list is `empty_content`.
 3. **Normalize:** each page goes through `normalizeListing()` (below). Products not in the catalog are counted, not failed.
 4. **Combine pages:** a device found on two pages at the same price is stored once (from the first page); at different prices it is stored from neither and reported as `invalid_price`. A usable price on one page wins over a rejection on another.
-5. **Store:** each found device in its own transaction: `upsertSynchronizedPrice()` then `markSyncSuccess()` (NWP-PRICE-005; a no-op until that story lands). A synchronized price replaces a manual one and sets `source_id`.
-
-Not here: retries, stopping on account-level errors, `update_log` rows and marking prices stale (NWP-PRICE-004/005).
+5. **Store:** each found device in its own transaction: `upsertSynchronizedPrice()` then `markSyncSuccess()` (NWP-PRICE-005; a no-op until that story lands). A synchronized price replaces a manual one and sets `source_id`. A database error rolls back only that device (`db_error`).
+6. **Record:** `recordBatchOutcome()` writes one `update_log` row per device (next section).
 
 ### Summary returned
 
 ```json
 { "runAt": "…", "vendorId": 1, "distributorId": 7,
-  "pages": [{ "sourceId": 101, "status": "success", "productCount": 32, "matched": 14, "unmatched": 18, "rejectedWithoutDevice": 0, "creditsUsed": 5 },
-            { "sourceId": 102, "status": "blocked", "productCount": 0, "message": "…" }],
+  "pages": [{ "sourceId": 101, "status": "success", "productCount": 32, "matched": 14, "unmatched": 18, "rejectedWithoutDevice": 0, "attempts": 1, "creditsUsed": 5 },
+            { "sourceId": 102, "status": "blocked", "productCount": 0, "attempts": 1, "message": "…" }],
   "found": [11, 12], "rejected": [{ "deviceId": 13, "reason": "invalid_price", "detail": "…" }],
-  "stored": { "inserted": 1, "updated": 1 } }
+  "dbErrors": [], "stored": { "inserted": 1, "updated": 1 }, "stoppedBy": null }
 ```
 
-`found` and `rejected` are what NWP-PRICE-004 uses to record an outcome per device; a device in neither was not seen on any page.
+`found`, `rejected` and `dbErrors` are what `recordBatchOutcome()` uses to record an outcome per device; a device in none of them was not seen on any page. `stoppedBy` is `null`, or `{ status, sourceId, message }` when an account-level error stopped the batch. The `process` action returns this summary plus `outcome: { recorded, byStatus }`.
 
 ### Pagination
 
@@ -122,6 +123,34 @@ The scraper reads exactly the URL it is given and never follows links. A store t
 ### Tuning the extraction
 
 If a store's products come back without SKUs or with the store's own item codes, adjust the descriptions in `LISTING_SCHEMA` and check with `npm run pricing:smoke -- <url>` (it uses the same schema). Do not add per-site code.
+
+## Failure handling (NWP-PRICE-004)
+
+### Pages
+
+- **Isolation:** each page's scrape, check and normalize step is isolated; a failure (or an unexpected exception, `unexpected_error`) is recorded for that page and the other pages continue.
+- **Retry:** `timeout` and `rate_limited` are retried once, after 2 s or the `Retry-After` time (5 s if none, at most 30 s). Nothing else is retried; `blocked` never is.
+- **Account-level errors** (`auth_error`, `quota_exceeded`, `network_error`) are not a distributor's fault. The batch stops: pages not yet started are `skipped`, `stoppedBy` is set so the workflow skips the remaining batches (NWP-PRICE-011), and no price is marked stale for it.
+- **Logging:** one log line per page: `{ source: "price-updater", event: "page", runAt, sourceId, status, productCount, matched, attempts }`. Pages with no attributed devices (for example on a first run) still show up.
+
+### Devices: one `update_log` row each
+
+`recordBatchOutcome()` loads the distributor's **synchronized** rows for the vendor's devices that were last priced from one of the batch's pages (manual rows never count), and records:
+
+| Device | Status |
+| --- | --- |
+| Found with a usable price, stored | `success` |
+| Found, storing failed | `db_error` |
+| Found, price unusable | `invalid_price` or `missing_field` |
+| Not found; its page failed | that page's status (`blocked`, `timeout`, …) |
+| Not found; its page succeeded | `not_listed` |
+| Never priced from this distributor and not found | nothing |
+
+After an account-level stop, unfound devices are not recorded. Every non-success also gets `markSyncFailure()` (NWP-PRICE-005, which marks the row stale; a no-op until that story lands). `run_at` is the run's shared `runAt`.
+
+`getRunResult(client, runAt)` reports the run as successful when at least one of its rows is `success`; finalize (NWP-PRICE-011) logs it.
+
+All statuses are in `sync-status.js`. Firecrawl error types and normalizer reasons map onto them by the same string.
 
 ## Price normalization (NWP-PRICE-003)
 
