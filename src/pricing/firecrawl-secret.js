@@ -7,8 +7,27 @@
 // cold start and cached.
 // Local: FIRECRAWL_API_KEY in .env (never committed).
 //
-// The AWS SDK v3 client is provided by the Lambda Node.js runtime and is required lazily, only when
-// FIRECRAWL_SECRET_ARN is set, so the deployment zip keeps zero npm dependencies.
+// The AWS SDK v3 client is required lazily, only when FIRECRAWL_SECRET_ARN is set, so local runs with
+// FIRECRAWL_API_KEY never load it. (NodejsFunction bundles it for the Lambda.)
+//
+// The Lambda runs in subnets with no direct internet route: Secrets Manager is reachable only through the
+// fck-nat instance while it runs, or a Secrets Manager VPC endpoint if the VPC has one. Without either, an
+// SDK call would wait until the Lambda timeout, so the client uses short timeouts and a failure names the
+// likely cause (NWP-PRICE-010).
+
+const CONNECTION_TIMEOUT_MS = 3000;
+const REQUEST_TIMEOUT_MS = 5000;
+
+function hintFor(err) {
+  const text = `${err && err.name ? err.name : ''} ${err && err.message ? err.message : ''}`;
+  if (/ResourceNotFound/.test(text)) {
+    return 'Create it once with: aws secretsmanager create-secret --name aghm-nwp/firecrawl --secret-string file://firecrawl-key.txt';
+  }
+  if (/AccessDenied/.test(text)) {
+    return 'Check that the stack grants this function read access to the secret.';
+  }
+  return 'If this is a timeout, Secrets Manager is unreachable: start the fck-nat instance, or add a Secrets Manager VPC endpoint.';
+}
 
 function defaultLoadSecretsManager() {
   // eslint-disable-next-line global-require
@@ -46,8 +65,20 @@ function createApiKeyProvider({ env = process.env, loadSecretsManager = defaultL
     const secretArn = env.FIRECRAWL_SECRET_ARN;
     if (typeof secretArn === 'string' && secretArn.trim().length > 0) {
       const { SecretsManagerClient, GetSecretValueCommand } = loadSecretsManager();
-      const client = new SecretsManagerClient({});
-      const output = await client.send(new GetSecretValueCommand({ SecretId: secretArn.trim() }));
+      const client = new SecretsManagerClient({
+        requestHandler: { connectionTimeout: CONNECTION_TIMEOUT_MS, requestTimeout: REQUEST_TIMEOUT_MS },
+        maxAttempts: 2,
+      });
+      let output;
+      try {
+        output = await client.send(new GetSecretValueCommand({ SecretId: secretArn.trim() }));
+      } catch (err) {
+        const reason = [err && err.name, err && err.message].filter(Boolean).join(': ') || 'unknown error';
+        const wrapped = new Error(`Could not read the Firecrawl API key secret (${reason}). ${hintFor(err)}`);
+        wrapped.name = 'SecretUnavailableError';
+        wrapped.cause = err;
+        throw wrapped;
+      }
       return parseSecretString(output && output.SecretString);
     }
 
@@ -77,4 +108,6 @@ module.exports = {
   getFirecrawlApiKey,
   createApiKeyProvider,
   parseSecretString,
+  CONNECTION_TIMEOUT_MS,
+  REQUEST_TIMEOUT_MS,
 };
