@@ -14,7 +14,7 @@
 //   3. Normalize each page (normalizeListing, NWP-PRICE-003).
 //   4. Combine the pages: a device found on two pages at different prices is stored from neither
 //      (the same rule normalizeListing applies within one page).
-//   5. Store each found device in its own transaction: upsertSynchronizedPrice() then markSyncSuccess().
+//   5. Store each found device in its own transaction: upsertSynchronizedPrice() then markSyncSuccess() (005).
 //      A database error rolls back only that device and is reported as `db_error` (004).
 //   6. Return a summary; recordBatchOutcome() (outcome.js, 004) turns it into one update_log row per device.
 //
@@ -26,6 +26,7 @@ const { LISTING_SCHEMA, readProducts } = require('./extraction');
 const { normalizeListing, NORMALIZE_REJECT_REASONS } = require('./normalize-record');
 const { loadVendorSkuIndex } = require('./sources');
 const { upsertSynchronizedPrice } = require('./price-store');
+const { markSyncSuccess: markSyncSuccessInDb } = require('./pricing-state');
 const { SYNC_STATUS, RETRYABLE, ACCOUNT_LEVEL, fromFirecrawlError } = require('./sync-status');
 const db = require('./db');
 
@@ -234,7 +235,7 @@ function logPage(logger, runAt, page) {
  * @param {Function} [deps.loadSkuIndex]     async (vendorId) => Map
  * @param {Function} [deps.withTransaction]  db.withTransaction
  * @param {Function} [deps.upsertPrice]      upsertSynchronizedPrice(client, record)
- * @param {Function} [deps.markSyncSuccess]  async (client, { deviceId, distributorId }); NWP-PRICE-005
+ * @param {Function} [deps.markSyncSuccess]  async (client, { deviceId, distributorId }); default pricing-state.js
  * @param {Function} [deps.now]              () => Date, the retrieval time of each page
  * @param {Function} [deps.sleep]            async (ms), the retry backoff
  * @param {{ log: Function }} [deps.logger]  default: console
@@ -246,9 +247,7 @@ async function processSourceBatch(input, {
   loadSkuIndex = async (vendorId) => loadVendorSkuIndex(await db.getPool(), vendorId),
   withTransaction = db.withTransaction,
   upsertPrice = upsertSynchronizedPrice,
-  // NWP-PRICE-005 provides the real markSyncSuccess (clears is_stale); until then a successful store
-  // changes only the price, source and retrieval time.
-  markSyncSuccess = async () => {},
+  markSyncSuccess = markSyncSuccessInDb,   // clears is_stale (NWP-PRICE-005)
   now = () => new Date(),
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   logger = console,
