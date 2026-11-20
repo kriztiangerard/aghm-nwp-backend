@@ -36,8 +36,9 @@ describe('evaluateManualReview', () => {
 
     assert.deepEqual(result, { flagged: [11], notFlagged: [12] });
     const [sql, params] = query.mock.calls[0].arguments;
-    assert.match(sql, /bool_and\(consecutive_failure_count >= \$2\)/);
-    assert.match(sql, /source_id IS NOT NULL[\s\S]*GROUP BY device_id/);           // only synchronized rows decide
+    assert.match(sql, /bool_and\(consecutive_failure_count >= \$2\) FILTER \(WHERE source_id IS NOT NULL\)/);  // only synchronized rows count
+    assert.match(sql, /AND NOT bool_or\(source_id IS NULL\) AS needs_review/);    // a manual price clears the flag
+    assert.match(sql, /HAVING bool_or\(source_id IS NOT NULL\)/);                  // manual-only devices left alone
     assert.match(sql, /SET needs_manual_review = decision\.needs_review/);          // sets true OR false: clears too (AC5)
     assert.match(sql, /AND p\.source_id IS NOT NULL/);                               // manual rows never flagged
     assert.doesNotMatch(sql, /INSERT|DELETE/);
@@ -161,14 +162,14 @@ describe('setManualPrice', () => {
   });
 
   test('re-evaluates the device\'s review flag after the update', async () => {
-    const { client, statements } = fakeClient({ devices: omada, flagged: [11] });
+    const { client, statements } = fakeClient({ devices: omada, flagged: [] });
 
     const result = await setManualPrice(client, input, { now: () => VERIFIED });
 
     const order = statements.map(([sql]) => sql).findIndex((sql) => /WITH decision AS/.test(sql));
     const upsertAt = statements.map(([sql]) => sql).findIndex((sql) => /INSERT INTO pricing/.test(sql));
     assert.ok(order > upsertAt);
-    assert.equal(result.stillNeedsReview, true);   // other synchronized distributors still failing
+    assert.equal(result.stillNeedsReview, false);   // a manual price clears the flag, even with other distributors failing
     assert.equal(result.replaced, 'inserted');
     assert.equal(result.medianRefreshed, false);   // no refreshMedians (NWP-PRICE-008 not merged)
   });

@@ -6,7 +6,8 @@
 //   markSyncFailure      when a sync attempt for the pair fails: stale, failure count + 1; the price, source
 //                        and date are left exactly as they were, so the last verified price stays usable. (005, 006)
 //   evaluateManualReview at finalize: a device needs manual review when EVERY one of its synchronized rows
-//                        has failed MANUAL_REVIEW_THRESHOLD consecutive cycles.                    (006)
+//                        has failed MANUAL_REVIEW_THRESHOLD consecutive cycles, and it has no manual
+//                        price (a manual price clears the flag).                                   (006)
 //
 // None of these inserts or deletes. Manual rows (source_id NULL) are never marked stale, never counted and
 // never flagged. A device counts as stale for the engine only when ALL its rows are stale
@@ -77,6 +78,9 @@ async function markSyncSuccess(client, pair) {
 /**
  * For each device, sets needs_manual_review on all its synchronized rows to whether EVERY synchronized row has
  * reached the threshold. A device with one row below the threshold is not flagged, even if others reached it.
+ * A device with a manual price (any row with source_id NULL) is never flagged: the manual price is the
+ * administrator's review, so it clears the flag and keeps it clear while that manual row exists. A later
+ * successful scrape replaces the manual row, and the normal rule applies again.
  * Idempotent: running it twice gives the same result. Devices with no synchronized rows are left alone.
  *
  * @param {{ query: Function }} client
@@ -95,11 +99,13 @@ async function evaluateManualReview(client, deviceIds, { threshold = MANUAL_REVI
 
   const { rows } = await client.query(
     `WITH decision AS (
-       SELECT device_id, bool_and(consecutive_failure_count >= $2) AS needs_review
+       SELECT device_id,
+              bool_and(consecutive_failure_count >= $2) FILTER (WHERE source_id IS NOT NULL)
+                AND NOT bool_or(source_id IS NULL) AS needs_review
          FROM pricing
         WHERE device_id = ANY($1::int[])
-          AND source_id IS NOT NULL
         GROUP BY device_id
+       HAVING bool_or(source_id IS NOT NULL)
      )
      UPDATE pricing AS p
         SET needs_manual_review = decision.needs_review

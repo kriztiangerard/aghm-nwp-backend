@@ -61,9 +61,7 @@ async function main() {
   const verb = values['dry-run'] ? 'Would set' : 'Set';
   console.log(`${verb} ${result.vendor} ${result.sku} (${result.name}) at ${result.distributor} to PHP ${result.price} as a manual price.`);
   console.log(`  previous row: ${result.replaced === 'inserted' ? 'none (new row)' : `${result.replaced} price`}`);
-  console.log(`  manual review: ${result.stillNeedsReview
-    ? 'STILL FLAGGED, because the device\'s other synchronized distributors have also failed 3+ runs; enter a price for those too, or wait for a successful sync'
-    : 'not flagged'}`);
+  console.log(`  manual review: ${result.stillNeedsReview ? 'STILL FLAGGED (unexpected; check the device\'s pricing rows)' : 'cleared (a device with a manual price is not flagged)'}`);
   console.log(`  device median: ${result.medianRefreshed ? 'recalculated' : 'NOT recalculated (NWP-PRICE-008 is not merged yet)'}`);
   if (values['dry-run']) console.log('Dry run: nothing was saved.');
 }
