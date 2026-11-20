@@ -159,6 +159,36 @@ A JSON-format scrape costs 5 credits per page (1 base + 4 for JSON) at the time 
 
 Pricing tests use `node:test` and run in CI with `node --test tests/pricing/*.test.js`.
 
+## Price Updater: Manual Review
+
+There is no admin dashboard and no login (manuscript delimitations). A team member acting as administrator reviews flagged prices and enters verified prices with two scripts run against the database. Both need `DATABASE_URL` (and `DB_SSL=true` for RDS) in `.env`.
+
+**When a device is flagged:** every one of its synchronized prices (one per distributor) has failed 3 sync runs in a row (`MANUAL_REVIEW_THRESHOLD`, `src/pricing/constants.js`), and it has no manual price. The weekly run's summary log line in CloudWatch includes the number of flagged devices (`devicesNeedingReview`).
+
+### 1. List flagged devices
+
+```bash
+npm run pricing:review            # readable list
+npm run pricing:review -- --json  # the same data as JSON
+```
+
+For each flagged device: vendor, SKU, name, current price and its last verified date, and for each distributor (with its id) the stored price, whether it is manual, the failure count, and the latest sync status and error (for example `blocked`, `not_listed`). Read-only.
+
+### 2. Verify a price, then enter it
+
+Check the price with the distributor (or another reliable source), then:
+
+```bash
+npm run pricing:set-manual -- --vendor "TP-Link Omada" --sku ER605 --distributor 3 --price 3450 --dry-run
+npm run pricing:set-manual -- --vendor "TP-Link Omada" --sku ER605 --distributor 3 --price 3450
+```
+
+- `--price` accepts the same formats as scraped prices (`3450`, `3,450.00`, `₱3,450`); ranges and other currencies are rejected.
+- `--dry-run` shows what would change and saves nothing.
+- The row is saved as a manual price (`source_id` NULL); its stale flag, failure count and review flag are cleared, and the device's median price is recalculated.
+- The device's review flag is cleared, even if its **other** synchronized distributors are still failing, and it stays clear while the manual price exists. Those distributors keep being scraped weekly; when one succeeds again, its scraped price joins the median. A successful scrape from the **same** distributor replaces the manual price, and the normal flag rule applies again.
+- A later successful scrape for the same device and distributor replaces the manual price automatically.
+
 ## Git Workflow
 Do not commit directly to `main` or `development`. All changes must be made on a separate branch and submitted through a Pull Request targeting `development`.
 
