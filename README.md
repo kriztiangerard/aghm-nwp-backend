@@ -103,6 +103,62 @@ Review the `cdk diff` output before every deploy, and stop if resources you did 
 ### Data
 Deploying does not seed the database. Run migrations and `npm run seed:devices` as a separate step after the first deploy and after catalog changes. Hardware prices are refreshed by the scheduled price updater, and device lifecycle status is verified manually against vendor bulletins.
 
+## Price Updater: Firecrawl Integration
+
+The Price updater scrapes distributor listing pages through [Firecrawl](https://docs.firecrawl.dev) (v2 REST API). The integration lives in `src/pricing/` (CommonJS):
+
+| File | Purpose |
+| --- | --- |
+| `firecrawl-client.js` | `scrapeProductPage(url, { schema, prompt?, pageTimeoutMs?, country? })`. Calls `POST /v2/scrape` with Firecrawl's JSON format and returns a typed result. Never throws for request failures. |
+| `firecrawl-secret.js` | `getFirecrawlApiKey()`. Reads the key from Secrets Manager (`FIRECRAWL_SECRET_ARN`) once per cold start, or from `FIRECRAWL_API_KEY` locally. |
+| `firecrawl-errors.js` | `FIRECRAWL_ERROR_TYPES`, the error types the wrapper can return. NWP-PRICE-004 maps them onto `update_log.status`. |
+
+### Configuration
+
+| Variable | Where | Meaning |
+| --- | --- | --- |
+| `FIRECRAWL_API_KEY` | `.env` (local only) | Firecrawl API key. Never commit it. |
+| `FIRECRAWL_SECRET_ARN` | Lambda environment (set by CDK) | Secrets Manager secret holding the key, as the plain key or as JSON `{ "apiKey": "fc-..." }`. Takes precedence over `FIRECRAWL_API_KEY`. |
+
+### Request defaults
+
+- `formats: [{ type: "json", schema }]`: Firecrawl's LLM extraction, so there is no site-specific parsing code.
+- `maxAge: 0`: always fetch a fresh page (Firecrawl otherwise serves cached copies up to two days old).
+- `location: { country: "PH" }`: Firecrawl defaults to the US; Philippine stores may show different prices to foreign visitors.
+- `timeout: 60000` ms page timeout; the client waits 15 s longer before giving up.
+
+### Error types
+
+| `errorType` | When |
+| --- | --- |
+| `timeout` | No answer in time, or Firecrawl 408/504 |
+| `rate_limited` | Firecrawl 429 (`retryAfterSeconds` from `Retry-After` when present) |
+| `blocked` | The store answered 401/403/429/451 (CAPTCHA, anti-bot, login wall), or Firecrawl returned 403 for the site |
+| `invalid_url` | Not an absolute http(s) URL, or the store answered 404/410 |
+| `http_error` | Any other non-success response |
+| `empty_content` | Success, but the extracted JSON is missing or every field is empty |
+| `auth_error` | Key missing or unreadable, or Firecrawl 401 |
+| `quota_exceeded` | Firecrawl 402 (plan credits used up) |
+| `network_error` | Firecrawl unreachable, for example while the fck-nat instance is stopped |
+
+Blocks are never solved or worked around, and the wrapper never retries (the retry policy is in NWP-PRICE-004). Error messages are cut to 500 characters, and the API key is replaced with `[redacted]` if it ever appears in one.
+
+### Manual check
+
+```bash
+npm run pricing:smoke -- "<distributor listing page URL>"
+```
+
+Prints the result and the number of products extracted; exits 0 on success. Each run spends Firecrawl credits.
+
+### Credits and limits (weekly job)
+
+A JSON-format scrape costs 5 credits per page (1 base + 4 for JSON) at the time of writing; cached results are charged in full. Monthly estimate: `listing pages (including extra pagination pages) × 5 × 4.35 weekly runs`. Fill in the plan's monthly credits and concurrent-request limit from the Firecrawl dashboard; the concurrency sets `FIRECRAWL_CONCURRENCY` (NWP-PRICE-002) and the workflow's Map concurrency (NWP-PRICE-011).
+
+### Tests
+
+Pricing tests use `node:test` and run in CI with `node --test tests/pricing/*.test.js`.
+
 ## Git Workflow
 Do not commit directly to `main` or `development`. All changes must be made on a separate branch and submitted through a Pull Request targeting `development`.
 
