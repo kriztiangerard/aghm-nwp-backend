@@ -19,6 +19,7 @@
 // Every non-success gets markSyncFailure() (NWP-PRICE-005, which marks the row stale; 006 counts it).
 
 const { SYNC_STATUS, fromRejectReason } = require('./sync-status');
+const { markSyncFailure: markSyncFailureInDb } = require('./pricing-state');
 
 /**
  * Synchronized rows of this distributor for the vendor's devices, priced from one of these pages.
@@ -88,12 +89,11 @@ function attributeOutcomes(summary, trackedRows) {
  *
  * @param {{ query: Function }} client
  * @param {import('./collect').BatchSummary} summary
- * @param {{ markSyncFailure?: Function }} [deps]  async (client, { deviceId, distributorId }); NWP-PRICE-005
+ * @param {{ markSyncFailure?: Function }} [deps]  async (client, { deviceId, distributorId }); default pricing-state.js
  * @returns {Promise<{ recorded: number, byStatus: Record<string, number> }>}
  */
 async function recordBatchOutcome(client, summary, {
-  // NWP-PRICE-005 provides the real markSyncFailure (marks the row stale); until then failures are only logged.
-  markSyncFailure = async () => {},
+  markSyncFailure = markSyncFailureInDb,   // marks the synchronized row stale (NWP-PRICE-005)
 } = {}) {
   const sourceIds = (summary.pages || []).map((page) => page.sourceId);
   const tracked = await loadTrackedRows(client, {
