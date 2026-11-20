@@ -4,7 +4,7 @@
 //
 // The weekly Step Functions workflow (NWP-PRICE-011) invokes this one function with { action, ... }:
 //
-//   probe            check outbound internet access before scraping                 (this story)
+//   probe            check outbound internet access and that the Firecrawl key can be read   (this story)
 //   plan             list active sources and group them into batches               (NWP-PRICE-011)
 //   process          scrape and store one vendor x distributor batch                (NWP-PRICE-002/004)
 //   markBatchFailed  record a whole batch as failed after a crash or timeout        (NWP-PRICE-011)
@@ -15,6 +15,7 @@
 
 const { loadPricingConfig } = require('./config');
 const { probeOutbound } = require('./probe');
+const { getFirecrawlApiKey } = require('./secrets');
 
 const ACTIONS = Object.freeze({
   PROBE: 'probe',
@@ -45,7 +46,13 @@ function notImplemented(action, story) {
 }
 
 const DEFAULT_ACTIONS = Object.freeze({
-  [ACTIONS.PROBE]: async () => probeOutbound(),
+  // Outbound access first (a ProbeFailedError means fck-nat is not up yet, and the workflow retries), then the
+  // Firecrawl key (a SecretUnavailableError is a setup problem and is not retried). The key itself is not returned.
+  [ACTIONS.PROBE]: async () => {
+    const outbound = await probeOutbound();
+    await getFirecrawlApiKey();
+    return { ...outbound, firecrawlKey: 'readable' };
+  },
   [ACTIONS.PLAN]: notImplemented(ACTIONS.PLAN, 'NWP-PRICE-011'),
   [ACTIONS.PROCESS]: notImplemented(ACTIONS.PROCESS, 'NWP-PRICE-002'),
   [ACTIONS.MARK_BATCH_FAILED]: notImplemented(ACTIONS.MARK_BATCH_FAILED, 'NWP-PRICE-011'),

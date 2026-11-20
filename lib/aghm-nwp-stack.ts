@@ -34,6 +34,15 @@ export class AghmNwpStack extends cdk.Stack {
       vpcId: 'vpc-06f55cc32200b2717',
     });
 
+    const lambdaSubnets = [
+      ec2.Subnet.fromSubnetAttributes(this, 'LambdaSubnetA', {
+        subnetId: 'subnet-0a5873e4b08810625', availabilityZone: 'ap-southeast-1a', routeTableId: 'rtb-0034daa508cc8947b',
+      }),
+      ec2.Subnet.fromSubnetAttributes(this, 'LambdaSubnetB', {
+        subnetId: 'subnet-0314e01bfb11c0bc7', availabilityZone: 'ap-southeast-1b', routeTableId: 'rtb-0034daa508cc8947b',
+      }),
+    ];
+
     const lambdaSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(
       this, 'BackendSg', 'sg-08314c5a76cbd8cb0',
     );
@@ -69,7 +78,10 @@ export class AghmNwpStack extends cdk.Stack {
       const vpcProps: lambdaNodejs.NodejsFunctionProps = {
         ...baseProps,
         vpc,
-        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+        // Listed explicitly, not selected by type: these subnets' route table now sends 0.0.0.0/0 to the
+        // fck-nat instance, so a refreshed VPC lookup (cdk context --reset) could stop classifying them as
+        // Isolated and leave a type-based selection empty. Same two subnets the cached lookup lists as Isolated.
+        vpcSubnets: { subnets: lambdaSubnets },
         securityGroups: [lambdaSecurityGroup],
         bundling: { loader: { '.pem': 'text' } },
       };
@@ -183,7 +195,9 @@ export class AghmNwpStack extends cdk.Stack {
       environment: {
         ...databaseEnvironment,
         FIRECRAWL_SECRET_ARN: firecrawlSecret.secretArn,
-        FIRECRAWL_CONCURRENCY: '2',        // TODO: set from the Firecrawl plan's concurrent-request limit (NWP-PRICE-007)
+        // Pages scraped at once. Must not exceed the Firecrawl plan's concurrent browsers (Free 2, Hobby 5);
+        // extra requests only queue. 2 fits the Free plan; raise it only after upgrading.
+        FIRECRAWL_CONCURRENCY: '2',
         PRICE_MEDIAN_INCLUDE_STALE: 'false',
       },
       logGroup: makeLogGroup('PriceUpdaterLogs'),
