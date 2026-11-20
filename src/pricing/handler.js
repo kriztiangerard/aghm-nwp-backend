@@ -15,7 +15,7 @@
 
 const { loadPricingConfig } = require('./config');
 const { probeOutbound } = require('./probe');
-const { getFirecrawlApiKey } = require('./secrets');
+const { getFirecrawlApiKey } = require('./firecrawl-secret');   // NWP-PRICE-007: merge 007 before this branch
 
 const ACTIONS = Object.freeze({
   PROBE: 'probe',
@@ -47,7 +47,7 @@ function notImplemented(action, story) {
 
 const DEFAULT_ACTIONS = Object.freeze({
   // Outbound access first (a ProbeFailedError means fck-nat is not up yet, and the workflow retries), then the
-  // Firecrawl key (a SecretUnavailableError is a setup problem and is not retried). The key itself is not returned.
+  // Firecrawl key (a failure here is a setup problem, SecretUnavailableError, and is not retried). The key is not returned.
   [ACTIONS.PROBE]: async () => {
     const outbound = await probeOutbound();
     await getFirecrawlApiKey();
