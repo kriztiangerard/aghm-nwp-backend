@@ -47,12 +47,12 @@ async function findDistributor(client, distributorId) {
  * @param {{ query: Function }} client
  * @param {{ vendor: string, sku: string, distributorId: number, price: string }} input
  * @param {Object} [deps]
- * @param {Function|null} [deps.refreshMedians]  async (client, deviceIds); refreshDeviceMedians (NWP-PRICE-008).
- *   null: the device price is not recalculated and the result says so.
+ * @param {Function|null} [deps.refreshMedians]  async (client, deviceIds) => refreshDeviceMedians result
+ *   (NWP-PRICE-008). null: the device price is not recalculated (tests).
  * @param {Function} [deps.now]  () => Date, stored as last_updated (when the price was verified)
  * @returns {Promise<{ deviceId: number, vendor: string, sku: string, name: string, distributorId: number,
  *   distributor: string, price: string, replaced: 'inserted' | 'manual' | 'synchronized',
- *   stillNeedsReview: boolean, medianRefreshed: boolean }>}
+ *   stillNeedsReview: boolean, medianRefreshed: boolean, devicePrice: string | null }>}  devicePrice: the new median
  */
 async function setManualPrice(client, input, { refreshMedians = null, now = () => new Date() } = {}) {
   const { vendor, sku, distributorId, price } = input || {};
@@ -89,9 +89,12 @@ async function setManualPrice(client, input, { refreshMedians = null, now = () =
 
   const review = await evaluateManualReview(client, [deviceId]);
   let medianRefreshed = false;
+  let devicePrice = null;
   if (typeof refreshMedians === 'function') {
-    await refreshMedians(client, [deviceId]);
+    const refreshed = await refreshMedians(client, [deviceId]);
     medianRefreshed = true;
+    const entry = refreshed && Array.isArray(refreshed.updated) ? refreshed.updated.find((u) => u.deviceId === deviceId) : null;
+    devicePrice = entry ? entry.price : null;
   }
 
   return {
@@ -105,6 +108,7 @@ async function setManualPrice(client, input, { refreshMedians = null, now = () =
     replaced: before.length === 0 ? 'inserted' : (before[0].source_id === null ? 'manual' : 'synchronized'),
     stillNeedsReview: review.flagged.includes(deviceId),
     medianRefreshed,
+    devicePrice,
   };
 }
 
