@@ -73,6 +73,8 @@ function deps(scrape, db, extra = {}) {
     upsertPrice: db.upsertPrice,
     markSyncSuccess: db.markSyncSuccess,
     now: () => RETRIEVED,
+    sleep: async () => {},
+    logger: { log() {} },
     ...extra,
   };
 }
@@ -142,7 +144,7 @@ describe('processSourceBatch', () => {
 
     assert.deepEqual(summary.rejected, []);
     assert.deepEqual(summary.pages[0], {
-      sourceId: 101, creditsUsed: 5, status: PAGE_STATUS.SUCCESS, productCount: 3, matched: 1, unmatched: 2, rejectedWithoutDevice: 0,
+      sourceId: 101, creditsUsed: 5, attempts: 1, status: PAGE_STATUS.SUCCESS, productCount: 3, matched: 1, unmatched: 2, rejectedWithoutDevice: 0,
     });
   });
 
@@ -219,12 +221,12 @@ describe('processSourceBatch', () => {
 
     const summary = await processSourceBatch(batch(), deps(scrape, fakeDb()));
 
-    assert.deepEqual(summary.pages[0], { sourceId: 101, status: 'blocked', productCount: 0, message: 'Target returned 403.' });
+    assert.deepEqual(summary.pages[0], { sourceId: 101, status: 'blocked', productCount: 0, attempts: 1, message: 'Target returned 403.' });
     assert.equal(summary.pages[1].status, PAGE_STATUS.SUCCESS);
     assert.deepEqual(summary.found, [12]);
   });
 
-  test('a missing or empty product list is empty_content', async () => {
+  test('no products array is invalid_response; an empty list is empty_content', async () => {
     const scrape = fakeScrape({
       'https://store.example/omada?page=1': { ok: true, json: { items: [] }, httpStatus: 200 },
       'https://store.example/omada?page=2': [],
@@ -233,7 +235,7 @@ describe('processSourceBatch', () => {
     const summary = await processSourceBatch(batch(), deps(scrape, fakeDb()));
 
     assert.deepEqual(summary.pages.map((p) => [p.status, p.message]), [
-      ['empty_content', 'The extracted JSON has no products array.'],
+      ['invalid_response', 'The extracted JSON has no products array.'],
       ['empty_content', 'The page listed no products.'],
     ]);
     assert.deepEqual(summary.found, []);
@@ -269,13 +271,18 @@ describe('processSourceBatch', () => {
     assert.deepEqual(summary.pages.map((p) => p.sourceId), sources.map((s) => s.sourceId));   // batch order kept
   });
 
-  test('a database error stops the batch (NWP-PRICE-004 turns it into db_error)', async () => {
+  test('a database error rolls back only that device and is reported as a db error (004)', async () => {
     const scrape = fakeScrape({
       'https://store.example/omada?page=1': [{ sku: 'ER605', price: '₱3,500.00' }, { sku: 'EAP610', price: '₱5,200.00' }],
-      'https://store.example/omada?page=2': [],
+      'https://store.example/omada?page=2': [{ sku: 'SG2008P', price: '₱2,100.00' }],
     });
+    const db = fakeDb({ failOnDevice: 12 });
 
-    await assert.rejects(processSourceBatch(batch(), deps(scrape, fakeDb({ failOnDevice: 12 }))), /connection reset/);
+    const summary = await processSourceBatch(batch(), deps(scrape, db));
+
+    assert.deepEqual(summary.found, [11, 13]);
+    assert.deepEqual(summary.dbErrors, [{ deviceId: 12, detail: 'Storing the price failed: connection reset' }]);
+    assert.equal(db.markSyncSuccess.mock.callCount(), 2);   // not for the failed device
   });
 
   test('rejects a malformed batch before scraping', async () => {

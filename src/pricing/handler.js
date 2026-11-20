@@ -6,7 +6,7 @@
 //
 //   probe            check outbound internet access and that the Firecrawl key can be read   (this story)
 //   plan             list active sources and group them into batches               (NWP-PRICE-011)
-//   process          scrape and store one vendor x distributor batch                (NWP-PRICE-002; 004 adds outcomes)
+//   process          scrape and store one vendor x distributor batch, record outcomes (NWP-PRICE-002/004)
 //   markBatchFailed  record a whole batch as failed after a crash or timeout        (NWP-PRICE-011)
 //   finalize         medians, manual review, run result                             (NWP-PRICE-011)
 //
@@ -16,7 +16,9 @@
 const { loadPricingConfig } = require('./config');
 const { probeOutbound } = require('./probe');
 const { getFirecrawlApiKey } = require('./firecrawl-secret');
-const { processSourceBatch } = require('./collect');   // NWP-PRICE-007: merge 007 before this branch
+const { processSourceBatch } = require('./collect');
+const { recordBatchOutcome } = require('./outcome');
+const { withTransaction } = require('./db');   // NWP-PRICE-007: merge 007 before this branch
 
 const ACTIONS = Object.freeze({
   PROBE: 'probe',
@@ -59,7 +61,13 @@ const DEFAULT_ACTIONS = Object.freeze({
   },
   [ACTIONS.PLAN]: notImplemented(ACTIONS.PLAN, 'NWP-PRICE-011'),
   // event: { action: 'process', runAt, vendorId, distributorId, sources: [{ sourceId, sourceUrl }] }
-  [ACTIONS.PROCESS]: async (event, { config }) => processSourceBatch(event, { concurrency: config.firecrawlConcurrency }),
+  // Returns the batch summary plus `outcome` ({ recorded, byStatus }). `stoppedBy` is set when an
+  // account-level error stopped the batch; the workflow then skips the remaining batches (NWP-PRICE-011).
+  [ACTIONS.PROCESS]: async (event, { config }) => {
+    const summary = await processSourceBatch(event, { concurrency: config.firecrawlConcurrency });
+    const outcome = await withTransaction((client) => recordBatchOutcome(client, summary));
+    return { ...summary, outcome };
+  },
   [ACTIONS.MARK_BATCH_FAILED]: notImplemented(ACTIONS.MARK_BATCH_FAILED, 'NWP-PRICE-011'),
   [ACTIONS.FINALIZE]: notImplemented(ACTIONS.FINALIZE, 'NWP-PRICE-011'),
 });
