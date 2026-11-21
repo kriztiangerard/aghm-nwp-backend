@@ -11,7 +11,9 @@
     "seed:devices": "tsx scripts/seed-omada-devices.ts",
     "seed:unifi-devices": "tsx scripts/seed-unifi-devices.ts",
     "insert:unifi-productlines": "tsx scripts/insert-unifi-productlines.ts",
-    "pricing:smoke": "node --env-file=.env scripts/firecrawl-smoke.js"
+    "pricing:smoke": "node --env-file=.env scripts/firecrawl-smoke.js",
+    "seed:reyee-productlines": "tsx scripts/insert-reyee-productlines.ts",
+    "seed:reyee-devices": "tsx scripts/seed-reyee-devices.ts"
   },
   "devDependencies": {
     "@swc/core": "^1.15.0",
