@@ -1,0 +1,88 @@
+[
+  {
+    "vendor_id": 6,
+    "product_line": "Cisco Business 110",
+    "sku": "CBS110-8PP-D-NA",
+    "price": null,
+    "name": "Cisco Business CBS110-8PP-D Unmanaged Switch",
+    "description": "Desktop Gigabit switch with four PoE ports.",
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "category": "switch",
+    "capabilities": [
+      "switch"
+    ],
+    "switch_specs": {
+      "port_count": 8,
+      "copper_ports": 8,
+      "poe_ports": 4,
+      "poe_budget_w": 32,
+      "poe_standard": "af",
+      "switching_capacity_gbps": 16,
+      "layer": 2,
+      "max_power_draw_w": 38.02,
+      "sfp_ports": 0
+    }
+  },
+  {
+    "vendor_id": 6,
+    "product_line": "Cisco Business 250",
+    "sku": "CBS250-24P-4G-NA",
+    "price": null,
+    "name": "Cisco Business CBS250-24P-4G Smart Switch",
+    "description": "Rack-mounted smart switch with 24 Gigabit PoE+ ports and four Gigabit SFP uplinks.",
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "sunsetting",
+    "eos_date": "2024-10-29",
+    "eol_date": "2029-10-31",
+    "category": "switch",
+    "capabilities": [
+      "switch"
+    ],
+    "switch_specs": {
+      "port_count": 28,
+      "copper_ports": 24,
+      "poe_ports": 24,
+      "poe_budget_w": 195,
+      "poe_standard": "at",
+      "switching_capacity_gbps": 56,
+      "layer": 3,
+      "max_power_draw_w": 239.7,
+      "sfp_ports": 4,
+      "sfp_form_factor": "SFP"
+    }
+  },
+  {
+    "vendor_id": 6,
+    "product_line": "Cisco Business 350",
+    "sku": "CBS350-24P-4G-NA",
+    "price": null,
+    "name": "Cisco Business CBS350-24P-4G Managed Switch",
+    "description": "Rack-mounted managed switch with 24 Gigabit PoE+ ports, four Gigabit SFP uplinks, and Layer 3 features.",
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "sunsetting",
+    "eos_date": "2024-10-29",
+    "eol_date": "2029-10-31",
+    "category": "switch",
+    "capabilities": [
+      "switch"
+    ],
+    "switch_specs": {
+      "port_count": 28,
+      "copper_ports": 24,
+      "poe_ports": 24,
+      "poe_budget_w": 195,
+      "poe_standard": "at",
+      "switching_capacity_gbps": 56,
+      "layer": 3,
+      "max_power_draw_w": 239.7,
+      "sfp_ports": 4,
+      "sfp_form_factor": "SFP"
+    }
+  }
+]
