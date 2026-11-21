@@ -81,16 +81,21 @@ async function main(): Promise<void> {
       "SET CONSTRAINTS product_line_rank_unique DEFERRED"
     );
 
-    const vendorResult = await client.query(
+    await client.query(
       `INSERT INTO vendor (name, need_controller, management_modes)
        VALUES ($1, FALSE, ARRAY['dashboard']::TEXT[])
-       ON CONFLICT (name)
-       DO UPDATE SET
-         need_controller = FALSE,
-         management_modes = ARRAY['dashboard']::TEXT[]
-       RETURNING vendor_id`,
+       ON CONFLICT (name) DO NOTHING`,
       [VENDOR_NAME]
     );
+
+    const vendorResult = await client.query(
+      `SELECT vendor_id FROM vendor WHERE name = $1`,
+      [VENDOR_NAME]
+    );
+
+    if (vendorResult.rowCount !== 1) {
+      throw new Error("Grandstream vendor could not be resolved.");
+    }
 
     const vendorId = Number(vendorResult.rows[0].vendor_id);
 

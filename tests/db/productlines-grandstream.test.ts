@@ -91,6 +91,10 @@ describe("NWP-SETUP-013: Grandstream product-line SQL transactions", () => {
       queries.push(sql);
 
       if (sql.includes("INSERT INTO vendor")) {
+        return { rowCount: 1, rows: [] };
+      }
+
+      if (sql.includes("SELECT vendor_id FROM vendor")) {
         return { rowCount: 1, rows: [{ vendor_id: 77 }] };
       }
 
@@ -126,6 +130,52 @@ describe("NWP-SETUP-013: Grandstream product-line SQL transactions", () => {
     return { queries, query, connect, end };
   }
 
+  test("preserves existing vendor configuration on conflict", async () => {
+    const mock = mockClient({ existing: true });
+
+    await main();
+
+    const vendorInsert = mock.query.mock.calls.find(
+      (call) => String(call[0]).includes("INSERT INTO vendor")
+    );
+
+    expect(vendorInsert).toBeDefined();
+    expect(vendorInsert![0]).toContain("ON CONFLICT (name) DO NOTHING");
+    expect(vendorInsert![0]).not.toContain("DO UPDATE SET");
+
+    expect(mock.queries).toContain("COMMIT");
+  });
+
+  test("initializes new vendor and retrieves its database ID", async () => {
+    const mock = mockClient();
+
+    await main();
+
+    const vendorInsert = mock.query.mock.calls.find(
+      (call) => String(call[0]).includes("INSERT INTO vendor")
+    );
+
+    expect(vendorInsert).toBeDefined();
+    expect(vendorInsert![0]).toContain("VALUES ($1, FALSE, ARRAY['dashboard']::TEXT[])");
+
+    const lookup = mock.query.mock.calls.find(
+      (call) => String(call[0]).includes("SELECT vendor_id FROM vendor")
+    );
+
+    expect(lookup).toBeDefined();
+    expect(lookup![1]).toEqual(["Grandstream GWN Cloud"]);
+
+    const insertIndex = mock.queries.findIndex(
+      (sql) => sql.includes("INSERT INTO vendor")
+    );
+
+    const lookupIndex = mock.queries.findIndex(
+      (sql) => sql.includes("SELECT vendor_id FROM vendor")
+    );
+
+    expect(insertIndex).toBeLessThan(lookupIndex);
+    expect(mock.queries).toContain("COMMIT");
+  });
   test("begins transaction and defers product-line rank constraint", async () => {
     const mock = mockClient();
 
