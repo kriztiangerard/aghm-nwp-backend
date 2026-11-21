@@ -320,6 +320,101 @@ describe("NWP-SETUP-009 AC4 transaction rollback", () => {
   });
 });
 
+describe("NWP-SETUP-009 AC4 partial-write rollback", () => {
+  test("rolls back when specification insertion fails after device insertion", async () => {
+    const { seedOneDevice } =
+      require("../../scripts/seed-aruba-devices");
+
+    const { pool } = require("../../src/config/database");
+
+    const queries: string[] = [];
+
+    const client = {
+      query: jest.fn().mockImplementation(async (sql: string) => {
+        queries.push(sql);
+
+        if (sql.includes("FROM product_line")) {
+          return {
+            rowCount: 1,
+            rows: [{ product_line_id: 39 }],
+          };
+        }
+
+        if (sql.includes("SELECT device_id")) {
+          return {
+            rowCount: 0,
+            rows: [],
+          };
+        }
+
+        if (
+          sql.includes("INSERT INTO device (") &&
+          sql.includes("RETURNING device_id")
+        ) {
+          return {
+            rowCount: 1,
+            rows: [{ device_id: 999, inserted: true }],
+          };
+        }
+
+        if (sql.includes("INSERT INTO switch_specifications")) {
+          throw new Error("Simulated specification insertion failure");
+        }
+
+        return { rowCount: 1, rows: [] };
+      }),
+      release: jest.fn(),
+    };
+
+    const connectSpy = jest
+      .spyOn(pool, "connect")
+      .mockResolvedValue(client as any);
+
+    const device = {
+      vendor_id: 1,
+      sku: "TEST-PARTIAL-ROLLBACK",
+      price: null,
+      name: "Rollback Test Switch",
+      description: "Test device",
+      is_rack_mountable: false,
+      u_height: 0,
+      lifecycle_status: "active",
+      eos_date: null,
+      eol_date: null,
+      category: "switch",
+      product_line: "1430",
+      capabilities: ["switch"],
+      switch_specs: {
+        port_count: 24,
+        layer: 2,
+      },
+    };
+
+    try {
+      await expect(seedOneDevice(device)).rejects.toThrow(
+        "Simulated specification insertion failure"
+      );
+
+      const deviceInsertIndex = queries.findIndex(
+        sql => sql.includes("INSERT INTO device (")
+      );
+      const specsInsertIndex = queries.findIndex(
+        sql => sql.includes("INSERT INTO switch_specifications")
+      );
+      const rollbackIndex = queries.indexOf("ROLLBACK");
+
+      expect(queries[0]).toBe("BEGIN");
+      expect(deviceInsertIndex).toBeGreaterThan(-1);
+      expect(specsInsertIndex).toBeGreaterThan(deviceInsertIndex);
+      expect(rollbackIndex).toBeGreaterThan(specsInsertIndex);
+      expect(queries).not.toContain("COMMIT");
+      expect(client.release).toHaveBeenCalledTimes(1);
+    } finally {
+      connectSpy.mockRestore();
+    }
+  });
+});
+
 describe("NWP-SETUP-009 AC6 ingestion summary", () => {
   const { printIngestionSummary } =
     require("../../scripts/seed-aruba-devices");

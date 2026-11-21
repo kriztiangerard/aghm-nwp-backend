@@ -80,3 +80,41 @@ describe("NWP-SETUP-009 Aruba catalog validation", () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe("NWP-SETUP-009 AC4 malformed-entry handling", () => {
+  test("rejects a malformed Aruba device while retaining valid devices", () => {
+    const { validateDevices } =
+      require("../../scripts/seed-aruba-devices");
+
+    const switches =
+      require("../../db/catalog/aruba/aruba-switches.json");
+
+    const invalid = { ...switches[0] };
+    delete invalid.sku;
+
+    const logSpy = jest
+      .spyOn(console, "log")
+      .mockImplementation(() => {});
+
+    switches.push(invalid);
+
+    try {
+      const { validDevices, rejectedDevices } = validateDevices();
+
+      expect(validDevices).toHaveLength(26);
+      expect(rejectedDevices).toHaveLength(1);
+
+      expect(rejectedDevices[0].source).toBe("Aruba Switches");
+      expect(rejectedDevices[0].sku).toBe("Unknown SKU");
+      expect(rejectedDevices[0].errors.length).toBeGreaterThan(0);
+      expect(
+        rejectedDevices[0].errors.every(
+          (error: string) => typeof error === "string" && error.length > 0
+        )
+      ).toBe(true);
+    } finally {
+      switches.pop();
+      logSpy.mockRestore();
+    }
+  });
+});
