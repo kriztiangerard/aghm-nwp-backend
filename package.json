@@ -8,7 +8,7 @@
     "test": "jest",
     "cdk": "cdk",
     "generate:device-schemas": "tsx scripts/generate-device-schema.ts",
-    "seed:devices": "tsx scripts/seed-omada-devices.ts",
+    "seed:devices": "node --import tsx scripts/seed-devices.ts",
     "seed:unifi-devices": "tsx scripts/seed-unifi-devices.ts",
     "insert:unifi-productlines": "tsx scripts/insert-unifi-productlines.ts",
     "pricing:smoke": "node --env-file=.env scripts/firecrawl-smoke.js"
