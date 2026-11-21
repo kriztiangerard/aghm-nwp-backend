@@ -1,0 +1,160 @@
+[
+  {
+    "vendor_id": 6,
+    "product_line": "RV160 Series",
+    "sku": "RV160-K9-NA",
+    "price": null,
+    "name": "Cisco RV160 Gigabit VPN Router",
+    "description": "Stateful firewall and IPsec VPN router with 1 WAN and 4 switched Gigabit LAN ports.",
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "discontinued",
+    "eos_date": "2021-09-15",
+    "eol_date": "2026-09-30",
+    "category": "gateway_router",
+    "capabilities": [
+      "router",
+      "firewall",
+      "switch"
+    ],
+    "gateway_router_specs": {
+      "wan_ports": 1,
+      "lan_ports": 0,
+      "max_throughput_mbps": 600,
+      "vpn_supported": true,
+      "sfp_ports": 1,
+      "sfp_form_factor": "SFP"
+    },
+    "firewall_specs": {
+      "firewall_throughputs_mbps": 600,
+      "vpn_throughput_mbps": 50,
+      "max_concurrent_sessions": 15000
+    },
+    "switch_specs": {
+      "port_count": 4,
+      "copper_ports": 4,
+      "poe_ports": 0,
+      "poe_budget_w": 0,
+      "layer": 2,
+      "sfp_ports": 0
+    }
+  },
+  {
+    "vendor_id": 6,
+    "product_line": "RV260 Series",
+    "sku": "RV260-K9-NA",
+    "price": null,
+    "name": "Cisco RV260 Gigabit VPN Router",
+    "description": "Stateful firewall and IPsec VPN router with 1 WAN and 8 switched Gigabit LAN ports.",
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "discontinued",
+    "eos_date": "2021-09-15",
+    "eol_date": "2026-09-30",
+    "category": "gateway_router",
+    "capabilities": [
+      "router",
+      "firewall",
+      "switch"
+    ],
+    "gateway_router_specs": {
+      "wan_ports": 1,
+      "lan_ports": 0,
+      "max_throughput_mbps": 800,
+      "vpn_supported": true,
+      "sfp_ports": 1,
+      "sfp_form_factor": "SFP"
+    },
+    "firewall_specs": {
+      "firewall_throughputs_mbps": 800,
+      "vpn_throughput_mbps": 75,
+      "max_concurrent_sessions": 25000
+    },
+    "switch_specs": {
+      "port_count": 8,
+      "copper_ports": 8,
+      "poe_ports": 0,
+      "poe_budget_w": 0,
+      "layer": 2,
+      "sfp_ports": 0
+    }
+  },
+  {
+    "vendor_id": 6,
+    "product_line": "RV340 Series",
+    "sku": "RV340-K9-NA",
+    "price": null,
+    "name": "Cisco RV340 Gigabit VPN Router",
+    "description": "Stateful firewall and IPsec VPN router with 2 WAN and 4 switched Gigabit LAN ports.",
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "discontinued",
+    "eos_date": "2021-10-28",
+    "eol_date": "2026-10-31",
+    "category": "gateway_router",
+    "capabilities": [
+      "router",
+      "firewall",
+      "switch"
+    ],
+    "gateway_router_specs": {
+      "wan_ports": 2,
+      "lan_ports": 0,
+      "max_throughput_mbps": 900,
+      "vpn_supported": true,
+      "sfp_ports": 0
+    },
+    "firewall_specs": {
+      "firewall_throughputs_mbps": 900,
+      "vpn_throughput_mbps": 600,
+      "max_concurrent_sessions": 40000
+    },
+    "switch_specs": {
+      "port_count": 4,
+      "copper_ports": 4,
+      "poe_ports": 0,
+      "poe_budget_w": 0,
+      "layer": 2,
+      "sfp_ports": 0
+    }
+  },
+  {
+    "vendor_id": 6,
+    "product_line": "RV340 Series",
+    "sku": "RV345-K9-NA",
+    "price": null,
+    "name": "Cisco RV345 Gigabit VPN Router",
+    "description": "Stateful firewall and IPsec VPN router with 2 WAN and 16 switched Gigabit LAN ports.",
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "discontinued",
+    "eos_date": "2021-10-28",
+    "eol_date": "2026-10-31",
+    "category": "gateway_router",
+    "capabilities": [
+      "router",
+      "firewall",
+      "switch"
+    ],
+    "gateway_router_specs": {
+      "wan_ports": 2,
+      "lan_ports": 0,
+      "max_throughput_mbps": 900,
+      "vpn_supported": true,
+      "sfp_ports": 0
+    },
+    "firewall_specs": {
+      "firewall_throughputs_mbps": 900,
+      "vpn_throughput_mbps": 600,
+      "max_concurrent_sessions": 40000
+    },
+    "switch_specs": {
+      "port_count": 16,
+      "copper_ports": 16,
+      "poe_ports": 0,
+      "poe_budget_w": 0,
+      "layer": 2,
+      "sfp_ports": 0
+    }
+  }
+]
