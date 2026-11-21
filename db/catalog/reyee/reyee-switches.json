@@ -1,0 +1,78 @@
+[
+  {
+    "vendor_id": 4,
+    "category": "switch",
+    "product_line": "ES Smart Managed",
+    "capabilities": ["switch"],
+    "sku": "RG-ES216GC-V2",
+    "name": "Reyee RG-ES216GC-V2 16-Port Gigabit Smart Managed Switch",
+    "description": "16-port Gigabit Layer 2 cloud-managed non-PoE switch with 32 Gbps switching capacity.",
+    "price": null,
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "switch_specs": {
+      "port_count": 16,
+      "copper_ports": 16,
+      "poe_ports": 0,
+      "poe_budget_w": 0,
+      "switching_capacity_gbps": 32,
+      "layer": 2,
+      "sfp_ports": 0
+    }
+  },
+  {
+    "vendor_id": 4,
+    "category": "switch",
+    "product_line": "ES Smart Managed",
+    "capabilities": ["switch"],
+    "sku": "RG-ES228GS-LP",
+    "name": "Reyee RG-ES228GS-LP 28-Port Gigabit Smart Managed PoE Switch",
+    "description": "28-port Gigabit Layer 2 cloud-managed switch with 24 PoE+ ports, 250 W PoE budget and two SFP uplinks.",
+    "price": null,
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "switch_specs": {
+      "port_count": 28,
+      "copper_ports": 26,
+      "poe_ports": 24,
+      "poe_budget_w": 250,
+      "poe_standard": "at",
+      "switching_capacity_gbps": 56,
+      "layer": 2,
+      "sfp_ports": 2,
+      "sfp_form_factor": "SFP"
+    }
+  },
+  {
+    "vendor_id": 4,
+    "category": "switch",
+    "product_line": "NBS Layer 3 Managed",
+    "capabilities": ["switch"],
+    "sku": "RG-NBS5200-24GT4XS-P-V2",
+    "name": "Reyee RG-NBS5200-24GT4XS-P-V2 Layer 3 PoE Switch",
+    "description": "28-port Layer 3 managed switch with 24 Gigabit PoE+ ports, four 10GE SFP+ uplinks, 370 W PoE budget and 128 Gbps switching capacity.",
+    "price": null,
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "switch_specs": {
+      "port_count": 28,
+      "copper_ports": 24,
+      "poe_ports": 24,
+      "poe_budget_w": 370,
+      "poe_standard": "at",
+      "switching_capacity_gbps": 128,
+      "layer": 3,
+      "sfp_ports": 4,
+      "sfp_form_factor": "SFP+"
+    }
+  }
+]

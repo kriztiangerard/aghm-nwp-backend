@@ -198,6 +198,95 @@
 
     "poeStandard": { "type": "string", "enum": ["af", "at", "bt3"] },
 
+    "integratedFirewallSpecs": {
+      "type": "object",
+      "description": "Integrated gateway firewall specifications. Undocumented measurements may be omitted.",
+      "properties": {
+        "firewall_throughputs_mbps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "vpn_throughput_mbps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idps_throughput_mbps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "IDS/IPS throughput in Mbps. null or omitted = unknown; the engine raises a flag and never guesses."
+        },
+        "max_concurrent_sessions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wan_ports": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lan_ports": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_power_draw_w": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": []
+    },
+    "integratedControllerSpecs": {
+      "type": "object",
+      "description": "Integrated gateway controller specifications. Undocumented switch and gateway capacities may be omitted.",
+      "properties": {
+        "controller_type": {
+          "const": "integrated"
+        },
+        "max_managed_aps": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Max access points this controller can manage."
+        },
+        "max_managed_switches": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Max switches this controller can manage."
+        },
+        "max_managed_gateways": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Max gateways/routers this controller can manage."
+        },
+        "max_managed_aps_and_switches": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional combined cap shared by access points and switches, for controllers whose vendor states one (e.g. 22 for the Omada ER7212PC's integrated controller). The engine checks aps + switches against this in addition to the per-type limits."
+        },
+        "max_managed_clients": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lan_ports": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Ethernet ports on the appliance. Use 0 or omit for software/cloud controllers."
+        },
+        "power_method": {
+          "type": "string",
+          "description": "e.g. PoE 802.3af, DC adapter"
+        },
+        "max_power_draw_w": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "controller_type",
+        "max_managed_aps"
+      ]
+    },
     "gatewayRouterDevice": {
       "allOf": [
         { "$ref": "#/$defs/coreDevice" },
@@ -208,7 +297,7 @@
             "gateway_router_specs": { "$ref": "#/$defs/gatewayRouterSpecs" },
             "firewall_specs": {
               "description": "Present only when this gateway/router is ALSO capability-tagged as a firewall (dual-role device, e.g. UniFi UDM-Pro). Omit entirely for a plain gateway with no firewall role — don't send null, just leave the key out.",
-              "$ref": "#/$defs/firewallSpecs"
+              "$ref": "#/$defs/integratedFirewallSpecs"
             },
             "switch_specs": {
               "description": "Present only when this gateway/router has an integrated switch (e.g. Omada ER7212PC with built-in PoE ports). Omit entirely for a plain gateway. The engine counts ports from this block, so gateway_router_specs.lan_ports must be 0 whenever switch_specs is present (enforced below).",
@@ -216,7 +305,7 @@
             },
             "controller_specs": {
               "description": "Present only when this gateway/router has an integrated controller (e.g. Omada ER7212PC). Omit entirely for a plain gateway.",
-              "$ref": "#/$defs/controllerSpecs"
+              "$ref": "#/$defs/integratedControllerSpecs"
             }
           },
           "required": ["category", "gateway_router_specs", "product_line"],
