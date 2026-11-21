@@ -1,0 +1,280 @@
+[
+  {
+    "vendor_id": 5,
+    "category": "gateway_router",
+    "product_line": "Gigabit Multi-WAN VPN Routers (GWN700x)",
+    "capabilities": ["router", "controller"],
+    "sku": "GWN7001",
+    "name": "Grandstream GWN7001 Multi-WAN Gigabit VPN Router",
+    "description": "Wired multi-WAN VPN router with 6 Gigabit ports (all WAN/LAN configurable), 2.2 Gbps NAT routing, 530 Mbps IPsec VPN, up to 50 VPN tunnels and 30K NAT sessions. Built-in firewall (no published firewall throughput). Embedded controller manages the router and up to 100 GWN APs.",
+    "price": null,
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "gateway_router_specs": {
+      "wan_ports": 1,
+      "lan_ports": 5,
+      "max_throughput_mbps": 2200,
+      "vpn_supported": true,
+      "ha_capability": null
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 100,
+      "max_managed_switches": 0,
+      "max_managed_gateways": 1
+    }
+  },
+  {
+    "vendor_id": 5,
+    "category": "gateway_router",
+    "product_line": "Gigabit Multi-WAN VPN Routers (GWN700x)",
+    "capabilities": ["router", "controller"],
+    "sku": "GWN7002",
+    "name": "Grandstream GWN7002 Multi-WAN Gigabit VPN Router",
+    "description": "Wired multi-WAN VPN router with 4 Gigabit ports and 2 x 2.5G SFP ports (all WAN/LAN configurable), 2 PoE-out ports (48V passive or 802.3af), PoE-in, 2.2 Gbps NAT routing, 530 Mbps IPsec VPN, up to 50 VPN tunnels and 30K NAT sessions. Built-in firewall (no published firewall throughput). Embedded controller manages the router and up to 100 GWN APs.",
+    "price": null,
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "gateway_router_specs": {
+      "wan_ports": 2,
+      "lan_ports": 4,
+      "max_throughput_mbps": 2200,
+      "vpn_supported": true,
+      "ha_capability": null,
+      "sfp_ports": 2,
+      "sfp_form_factor": "SFP"
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 100,
+      "max_managed_switches": 0,
+      "max_managed_gateways": 1
+    }
+  },
+  {
+    "vendor_id": 5,
+    "category": "gateway_router",
+    "product_line": "Gigabit Multi-WAN VPN Routers (GWN700x)",
+    "capabilities": ["router", "controller"],
+    "sku": "GWN7003",
+    "name": "Grandstream GWN7003 Multi-WAN Gigabit VPN Router",
+    "description": "Rack-mountable wired multi-WAN VPN router with 9 Gigabit ports and 2 x 2.5G SFP ports (all WAN/LAN configurable), 2 PoE-out ports (48V passive or 802.3af), PoE-in, 2.2 Gbps NAT routing, 530 Mbps IPsec VPN, up to 100 VPN tunnels and 60K NAT sessions. Built-in firewall (no published firewall throughput). Embedded controller manages the router and up to 150 GWN APs.",
+    "price": null,
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "gateway_router_specs": {
+      "wan_ports": 2,
+      "lan_ports": 9,
+      "max_throughput_mbps": 2200,
+      "vpn_supported": true,
+      "ha_capability": null,
+      "sfp_ports": 2,
+      "sfp_form_factor": "SFP"
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 150,
+      "max_managed_switches": 0,
+      "max_managed_gateways": 1
+    }
+  },
+  {
+    "vendor_id": 5,
+    "category": "gateway_router",
+    "product_line": "2.5G Convergence Gateways (GCC601x)",
+    "capabilities": ["router", "firewall", "switch", "controller"],
+    "sku": "GCC6010",
+    "name": "Grandstream GCC6010 UC + Networking Convergence Gateway",
+    "description": "All-in-one VPN router, next-generation firewall (anti-virus, L3-L7 IDS/IPS, DPI, SSL inspection), IP PBX and PoE switch. 2 x 2.5G SFP and 5 x Gigabit ports (all WAN/LAN configurable, max 3 WAN), 4 PoE-out ports (802.3af/at, 36 W), 2.5 Gbps routing, 1 Gbps IPsec VPN, 900 Mbps IDS/IPS, 160K NAT sessions. Embedded controller manages up to 150 GWN APs and 500 clients. Desktop or wall mount.",
+    "price": null,
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "gateway_router_specs": {
+      "wan_ports": 3,
+      "lan_ports": 0,
+      "max_throughput_mbps": 2500,
+      "vpn_supported": true,
+      "ha_capability": null,
+      "sfp_ports": 2,
+      "sfp_form_factor": "SFP"
+    },
+    "firewall_specs": {
+      "firewall_throughputs_mbps": 900,
+      "vpn_throughput_mbps": 1000,
+      "idps_throughput_mbps": 900,
+      "max_concurrent_sessions": 160000,
+      "wan_ports": 3
+    },
+    "switch_specs": {
+      "port_count": 4,
+      "copper_ports": 4,
+      "poe_ports": 4,
+      "poe_budget_w": 36,
+      "poe_standard": "at",
+      "switching_capacity_gbps": 20,
+      "layer": 2
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 150,
+      "max_managed_switches": 0,
+      "max_managed_gateways": 1,
+      "max_managed_clients": 500
+    }
+  },
+  {
+    "vendor_id": 5,
+    "category": "gateway_router",
+    "product_line": "2.5G Convergence Gateways (GCC601x)",
+    "capabilities": ["router", "firewall", "switch", "controller"],
+    "sku": "GCC6011",
+    "name": "Grandstream GCC6011 UC + Networking Convergence Gateway",
+    "description": "Rack-mountable all-in-one VPN router, next-generation firewall (anti-virus, L3-L7 IDS/IPS, DPI, SSL inspection), IP PBX and PoE switch. 2 x 2.5G SFP and 10 x Gigabit ports (3 fixed WAN), 4 PoE-out ports (802.3af/at, 36 W), 2.5 Gbps routing, 1 Gbps IPsec VPN, 900 Mbps IDS/IPS, 160K NAT sessions, optional M.2 SSD. Embedded controller manages up to 150 GWN APs and 500 clients.",
+    "price": null,
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "gateway_router_specs": {
+      "wan_ports": 3,
+      "lan_ports": 0,
+      "max_throughput_mbps": 2500,
+      "vpn_supported": true,
+      "ha_capability": null
+    },
+    "firewall_specs": {
+      "firewall_throughputs_mbps": 900,
+      "vpn_throughput_mbps": 1000,
+      "idps_throughput_mbps": 900,
+      "max_concurrent_sessions": 160000,
+      "wan_ports": 3
+    },
+    "switch_specs": {
+      "port_count": 9,
+      "copper_ports": 7,
+      "poe_ports": 4,
+      "poe_budget_w": 36,
+      "poe_standard": "at",
+      "switching_capacity_gbps": 30,
+      "layer": 2,
+      "sfp_ports": 2,
+      "sfp_form_factor": "SFP"
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 150,
+      "max_managed_switches": 0,
+      "max_managed_gateways": 1,
+      "max_managed_clients": 500
+    }
+  },
+  {
+    "vendor_id": 5,
+    "category": "gateway_router",
+    "product_line": "10G Convergence Gateways (GCC602x)",
+    "capabilities": ["router", "firewall", "switch", "controller"],
+    "sku": "GCC6020",
+    "name": "Grandstream GCC6020 UC + Networking Convergence Gateway",
+    "description": "All-in-one VPN router, next-generation firewall (anti-virus, L3-L7 IDS/IPS, DPI, SSL inspection), IP PBX and PoE switch. 1 x 10G SFP+, 1 x 2.5GbE and 4 x Gigabit ports (all WAN/LAN configurable, max 3 WAN), 5 PoE-out ports (802.3af/at, 120 W), 6.5 Gbps routing, 1.3 Gbps IPsec VPN, 6 Gbps NGFW (DPI+IPS), 320K NAT sessions. Embedded controller manages up to 300 GWN APs and 500 clients. Desktop, wall or rack mount.",
+    "price": null,
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "gateway_router_specs": {
+      "wan_ports": 3,
+      "lan_ports": 0,
+      "max_throughput_mbps": 6500,
+      "vpn_supported": true,
+      "ha_capability": null,
+      "sfp_ports": 1,
+      "sfp_form_factor": "SFP+"
+    },
+    "firewall_specs": {
+      "firewall_throughputs_mbps": 6000,
+      "vpn_throughput_mbps": 1300,
+      "idps_throughput_mbps": 6000,
+      "max_concurrent_sessions": 320000,
+      "wan_ports": 3
+    },
+    "switch_specs": {
+      "port_count": 3,
+      "copper_ports": 3,
+      "poe_ports": 3,
+      "poe_budget_w": 120,
+      "poe_standard": "at",
+      "switching_capacity_gbps": 26,
+      "layer": 2
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 300,
+      "max_managed_switches": 0,
+      "max_managed_gateways": 1,
+      "max_managed_clients": 500
+    }
+  },
+  {
+    "vendor_id": 5,
+    "category": "gateway_router",
+    "product_line": "10G Convergence Gateways (GCC602x)",
+    "capabilities": ["router", "firewall", "switch", "controller"],
+    "sku": "GCC6021",
+    "name": "Grandstream GCC6021 UC + Networking Convergence Gateway",
+    "description": "Rack-mountable all-in-one VPN router, next-generation firewall (anti-virus, L3-L7 IDS/IPS, DPI, SSL inspection), IP PBX and PoE switch. 4 x 10G SFP+ (port 28 fixed WAN), 8 x 2.5GbE and 16 x Gigabit ports (max 5 WAN), 24 PoE-out ports (8 x 802.3af/at/bt, 16 x 802.3af/at, 370 W), 2 HA ports, 10 Gbps routing, 1.3 Gbps IPsec VPN, 9 Gbps NGFW (DPI+IPS), 320K NAT sessions. Embedded controller manages up to 300 GWN APs and 1,000 clients.",
+    "price": null,
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "gateway_router_specs": {
+      "wan_ports": 5,
+      "lan_ports": 0,
+      "max_throughput_mbps": 10000,
+      "vpn_supported": true,
+      "ha_capability": true,
+      "sfp_ports": 1,
+      "sfp_form_factor": "SFP+"
+    },
+    "firewall_specs": {
+      "firewall_throughputs_mbps": 9000,
+      "vpn_throughput_mbps": 1300,
+      "idps_throughput_mbps": 9000,
+      "max_concurrent_sessions": 320000,
+      "wan_ports": 5
+    },
+    "switch_specs": {
+      "port_count": 23,
+      "copper_ports": 20,
+      "poe_ports": 20,
+      "poe_budget_w": 370,
+      "poe_standard": "bt3",
+      "switching_capacity_gbps": 152,
+      "layer": 2,
+      "sfp_ports": 3,
+      "sfp_form_factor": "SFP+"
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 300,
+      "max_managed_switches": 0,
+      "max_managed_gateways": 1,
+      "max_managed_clients": 1000
+    }
+  }
+]
