@@ -1,27 +1,6 @@
 [
   {
     "vendor_id": 6,
-    "category": "gateway_router",
-    "name": "RV160 Series",
-    "line_rank": 1,
-    "source_note": "Cisco RV160 datasheet: one WAN and four switched LAN ports, with 600 Mbps NAT throughput."
-  },
-  {
-    "vendor_id": 6,
-    "category": "gateway_router",
-    "name": "RV260 Series",
-    "line_rank": 2,
-    "source_note": "Cisco RV260 datasheet: eight switched LAN ports and 800+ Mbps NAT throughput."
-  },
-  {
-    "vendor_id": 6,
-    "category": "gateway_router",
-    "name": "RV340 Series",
-    "line_rank": 3,
-    "source_note": "Cisco RV340 family comparison: dual WAN, 600 Mbps IPsec throughput, and 40,000 concurrent TCP sessions."
-  },
-  {
-    "vendor_id": 6,
     "category": "switch",
     "name": "Cisco Business 110",
     "line_rank": 1,
