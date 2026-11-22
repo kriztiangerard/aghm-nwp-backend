@@ -180,9 +180,11 @@ export async function seedCiscoCatalog() {
     if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not configured");
 
     const vendor = await pool.query<{ vendor_id: number }>(
-      `INSERT INTO vendor (name, need_controller)
-       VALUES ($1, false)
-       ON CONFLICT (name) DO UPDATE SET need_controller = EXCLUDED.need_controller
+      `INSERT INTO vendor (name, need_controller, management_modes)
+       VALUES ($1, false, ARRAY['dashboard', 'cli']::text[])
+       ON CONFLICT (name) DO UPDATE SET
+         need_controller = EXCLUDED.need_controller,
+         management_modes = EXCLUDED.management_modes
        RETURNING vendor_id`,
       ["Cisco Business"],
     );
