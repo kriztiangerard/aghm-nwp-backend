@@ -8,20 +8,20 @@ This is a starter catalog of selected order IDs. Regional variants can have
 different dates, power accessories, and radio approvals. Verify the order ID
 against local distribution before treating a row as a purchasable option.
 
-## Gateways
+## Catalog scope
 
-| SKUs | Hardware source | Lifecycle source |
-| --- | --- | --- |
-| RV160-K9-NA | [RV160 datasheet](https://www.cisco.com/c/en/us/products/collateral/routers/rv160-vpn-router/datasheet-c78-741410.html) | [RV160/RV260 bulletin](https://www.cisco.com/c/en/us/products/collateral/routers/small-business-rv-series-routers/eos-eol-notice-c51-2655972.html) |
-| RV260-K9-NA | [RV260 datasheet](https://www.cisco.com/c/en/us/products/collateral/routers/rv260-vpn-router/datasheet-c78-741409.html) | [RV160/RV260 bulletin](https://www.cisco.com/c/en/us/products/collateral/routers/small-business-rv-series-routers/eos-eol-notice-c51-2655972.html) |
-| RV340-K9-NA, RV345-K9-NA | [RV340 family datasheet](https://www.cisco.com/c/en/us/products/collateral/routers/small-business-rv-series-routers/datasheet-c78-742350.html), [model comparison](https://www.cisco.com/c/en/us/support/smb/product-support/small-business/routers-rv340-comparison.html) | [RV340/RV345 bulletin](https://www.cisco.com/c/en/us/products/collateral/routers/small-business-rv-series-routers/small-business-rv340-rv345-series-eol.html) |
+The Cisco Business starter catalog contains six devices: three switches and
+three access points. Two are active and four are sunsetting. The catalog
+contains six product lines across those categories.
 
-Cisco's NAT throughput is the published firewall forwarding benchmark used for
-both throughput fields. IPsec throughput supplies the separate VPN value.
-RV260 figures are published as 800+ and 75+ Mbps and stored as their integer
-lower bounds. The RV160 and RV260 combo WAN interfaces each count as one WAN with
-one SFP option. Integrated LAN switch ports are recorded only in `switch_specs`.
-The selected routers have passed their support dates.
+Discontinued devices are excluded from this starter catalog. The RV160,
+RV260, RV340, and RV345 gateways have passed their Cisco support dates.
+The gateway file is an empty array and the unused RV product lines are
+excluded. This catalog cannot supply a complete plan that requires a Cisco
+Business gateway.
+
+- [Cisco RV160/RV260 lifecycle bulletin](https://www.cisco.com/c/en/us/products/collateral/routers/small-business-rv-series-routers/eos-eol-notice-c51-2655972.html)
+- [Cisco RV340/RV345 lifecycle bulletin](https://www.cisco.com/c/en/us/products/collateral/routers/small-business-rv-series-routers/small-business-rv340-rv345-series-eol.html)
 
 ## Switches
 
@@ -51,8 +51,7 @@ cannot share a management network with the 140AC/240AC family.
 ## Catalog mapping
 
 The repo's catalog identifies Cisco Business as vendor 6 with `needController:
-false`. Cisco Business Wireless can use a primary AP for management, and none
-of the selected gateways has a documented integrated network controller.
+false`. Cisco Business Wireless can use a primary AP for management.
 [See Cisco's wireless support guide](https://www.cisco.com/c/en/us/support/smb/product-support/small-business/wireless-mesh-100-200-series.html).
 
 The catalog follows the Aruba device-file layout and uses the shared
