@@ -214,7 +214,7 @@
     "capabilities": ["ap"],
     "sku": "GWN7670E",
     "name": "Grandstream GWN7670E Dual-Band Wi-Fi 7 Access Point",
-    "description": "Dual-band Wi-Fi 7 BE3600 AP, 2x2:2 on 2.4 GHz and 3x3:2 on 5 GHz (688 + 2882 Mbps), 1 x 2.5G port, 802.3at PoE. Grandstream's spec sheet is marked preliminary and differs from the product page (512 vs 768 clients, 16 vs 17 W); the lower client count and higher power draw are used.",
+    "description": "Dual-band Wi-Fi 7 BE3600 AP, 2x2:2 on 2.4 GHz and 3x3:2 on 5 GHz (688 + 2882 Mbps), 1 x 2.5G port, 802.3at PoE. Grandstream's preliminary spec sheet and product page both list 512 clients; the higher published power draw of 17 W is used.",
     "price": null,
     "is_rack_mountable": false,
     "u_height": 0,

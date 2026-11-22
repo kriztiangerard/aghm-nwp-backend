@@ -153,7 +153,7 @@ discontinued.
 
 - GWN7801P PoE budget: datasheet/product page say 120 W; the newer doc-site table shows 130 W. 120 W used (lower).
 - GCC6010/6011 routing: doc site 2.5 Gbps; an older datasheet says 3 Gbps. 2.5 Gbps used (lower).
-- GWN7670E: preliminary spec sheet (512 clients / 16 W) vs product page (768 / 17 W). Lower clients, higher power used.
+- GWN7670E: preliminary spec sheet (512 clients / 16 W) vs product page (512 clients / 17 W). Both list 512 clients; higher power draw used.
 - GWN7003 `u_height: 1`: rack kit is included but the chassis height is not published.
 
 ## SETUP-013 database integration handoff
