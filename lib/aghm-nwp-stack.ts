@@ -8,12 +8,17 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as path from 'path';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
-import * as events from 'aws-cdk-lib/aws-events';
-import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import { PriceSyncWorkflow } from './price-sync-workflow';
+
+// Firecrawl limits (NWP-PRICE-010/011). Pages one batch scrapes at once (the function's FIRECRAWL_CONCURRENCY),
+// and the plan's concurrent browsers (Free 2, Hobby 5). The workflow runs browsers / pages batches at once,
+// so the plan's limit is never exceeded. Raise FIRECRAWL_PLAN_BROWSERS only after upgrading the plan.
+const FIRECRAWL_PAGES_PER_BATCH = 2;
+const FIRECRAWL_PLAN_BROWSERS = 2;
 
 export class AghmNwpStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -177,7 +182,7 @@ export class AghmNwpStack extends cdk.Stack {
     // 1c. BACKEND: Price updater (NWP-PRICE-010)
     // Same subnets and security group as the engine Lambdas (vpcProps). Those subnets' route table sends
     // 0.0.0.0/0 to the fck-nat instance, so the function reaches Firecrawl whenever fck-nat is running; it
-    // needs no NAT setting of its own. The weekly workflow that invokes it is NWP-PRICE-011.
+    // needs no NAT setting of its own. The weekly workflow that invokes it (NWP-PRICE-011) is section 1b.
 
     // Created once by hand so the key never appears in code or templates:
     //   aws secretsmanager create-secret --name aghm-nwp/firecrawl --secret-string file://firecrawl-key.txt
@@ -195,9 +200,8 @@ export class AghmNwpStack extends cdk.Stack {
       environment: {
         ...databaseEnvironment,
         FIRECRAWL_SECRET_ARN: firecrawlSecret.secretArn,
-        // Pages scraped at once. Must not exceed the Firecrawl plan's concurrent browsers (Free 2, Hobby 5);
-        // extra requests only queue. 2 fits the Free plan; raise it only after upgrading.
-        FIRECRAWL_CONCURRENCY: '2',
+        // Pages scraped at once per batch; see FIRECRAWL_PAGES_PER_BATCH at the top of this file.
+        FIRECRAWL_CONCURRENCY: String(FIRECRAWL_PAGES_PER_BATCH),
         PRICE_MEDIAN_INCLUDE_STALE: 'false',
       },
       logGroup: makeLogGroup('PriceUpdaterLogs'),
@@ -229,16 +233,32 @@ export class AghmNwpStack extends cdk.Stack {
     });
 
 
-    // 1b. BACKEND: EventBridge schedule (triggers the price sync)
-
-    // Placeholder only. NWP-PRICE-011 replaces it with a weekly EventBridge Scheduler schedule (the manuscript
-    // says weekly) that starts the sync workflow, which in turn invokes priceUpdaterFn (section 1c).
-
-    // const pricingUpdateRule = new events.Rule(this, 'PricingUpdateSchedule', {
-    //   schedule: events.Schedule.cron({ minute: '0', hour: '2' }),
-    // });
-
-    // pricingUpdateRule.addTarget(new targets.LambdaFunction(pricingUpdateLambda));
+    // 1b. BACKEND: Weekly price sync (NWP-PRICE-011)
+    // EventBridge Scheduler starts a Standard state machine every Sunday at 02:00 Asia/Manila. It starts the
+    // fck-nat instance if it is stopped, runs the Price updater's probe, plan, process (one per batch) and
+    // finalize actions, then stops fck-nat again if it started it. See lib/price-sync-workflow.ts.
+    //
+    // fck-nat is a standalone EC2 instance created outside this stack. Its id comes from cdk.json
+    // (context "fckNatInstanceId") or `cdk deploy -c fckNatInstanceId=i-...`. Without it the workflow and
+    // schedule are left out of the template (with a warning), so engine deploys still work.
+    const natInstanceId = String(this.node.tryGetContext('fckNatInstanceId') ?? '').trim();
+    let priceSync: PriceSyncWorkflow | undefined;
+    if (natInstanceId === '') {
+      cdk.Annotations.of(this).addWarningV2('nwp:price-sync-skipped',
+        'fckNatInstanceId is not set in cdk.json context: the weekly price sync workflow (NWP-PRICE-011) is not deployed.');
+    } else {
+      if (!/^i-[0-9a-f]{8,17}$/.test(natInstanceId)) {
+        throw new Error(`fckNatInstanceId "${natInstanceId}" is not an EC2 instance id (i-...).`);
+      }
+      priceSync = new PriceSyncWorkflow(this, 'PriceSync', {
+        priceUpdaterFn,
+        natInstanceId,
+        pagesPerBatch: FIRECRAWL_PAGES_PER_BATCH,
+        firecrawlBrowsers: FIRECRAWL_PLAN_BROWSERS,
+        scheduleExpression: 'cron(0 2 ? * SUN *)',   // Sunday 02:00 (decision by G, 2026-11-23)
+        scheduleTimezone: 'Asia/Manila',
+      });
+    }
 
 
     // 2. FRONTEND: Moved to its own repository; use console
@@ -258,6 +278,9 @@ export class AghmNwpStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'StateMachineArn', { value: engineMachine.stateMachineArn });
 
     new cdk.CfnOutput(this, 'PriceUpdaterFunctionName', { value: priceUpdaterFn.functionName });
+    if (priceSync) {
+      new cdk.CfnOutput(this, 'PriceSyncStateMachineArn', { value: priceSync.stateMachine.stateMachineArn });
+    }
 
     // Re-enable alongside the API Gateway above once it's active.
     new cdk.CfnOutput(this, 'ApiUrl', {

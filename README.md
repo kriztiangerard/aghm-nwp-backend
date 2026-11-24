@@ -100,6 +100,8 @@ The deployed API URL is shown in the stack outputs. Provide it to the frontend a
 
 Review the `cdk diff` output before every deploy, and stop if resources you did not intend to change are shown as replaced.
 
+The weekly price sync (NWP-PRICE-011) is deployed only when `fckNatInstanceId` is set in `cdk.json` (see "Price Updater: Weekly Sync"). Without it, `cdk synth` prints a warning and the rest of the stack deploys as usual.
+
 ### Data
 Deploying does not seed the database. Run migrations and `npm run seed:devices` as a separate step after the first deploy and after catalog changes. Hardware prices are refreshed by the scheduled price updater, and device lifecycle status is verified manually against vendor bulletins.
 
@@ -153,11 +155,50 @@ Prints the result and the number of products extracted; exits 0 on success. Each
 
 ### Credits and limits (weekly job)
 
-A JSON-format scrape costs 5 credits per page (1 base + 4 for JSON) at the time of writing; cached results are charged in full. Monthly estimate: `listing pages (including extra pagination pages) × 5 × 4.35 weekly runs`. Fill in the plan's monthly credits and concurrent-request limit from the Firecrawl dashboard; the concurrency sets `FIRECRAWL_CONCURRENCY` (NWP-PRICE-002) and the workflow's Map concurrency (NWP-PRICE-011).
+A JSON-format scrape costs 5 credits per page (1 base + 4 for JSON) at the time of writing; cached results are charged in full. Monthly estimate: `listing pages (including extra pagination pages) × 5 × 4.35 weekly runs`. Fill in the plan's monthly credits and concurrent-request limit from the Firecrawl dashboard. The limits are two constants at the top of `lib/aghm-nwp-stack.ts`: `FIRECRAWL_PAGES_PER_BATCH` (the function's `FIRECRAWL_CONCURRENCY`, NWP-PRICE-002) and `FIRECRAWL_PLAN_BROWSERS`; the workflow runs `browsers ÷ pages per batch` batches at once (NWP-PRICE-011).
 
 ### Tests
 
 Pricing tests use `node:test` and run in CI with `node --test tests/pricing/*.test.js`.
+
+## Price Updater: Weekly Sync
+
+Every **Sunday at 02:00 (Asia/Manila)**, EventBridge Scheduler starts the `PriceSync` Standard state machine (`lib/price-sync-workflow.ts`, NWP-PRICE-011):
+
+1. **fck-nat:** if the instance is stopped, the workflow starts it and waits until it is running (up to 10 minutes). If it was already running, it is left running at the end.
+2. **Probe:** checks outbound access and the Firecrawl key, retried for about 6 minutes while fck-nat comes up.
+3. **Plan:** groups the active `pricing_source` rows into vendor × distributor batches. Every batch shares one `runAt`, the execution's start time.
+4. **Batches:** one `process` call per batch (NWP-PRICE-002/004). A batch that fails as a whole (for example a Lambda timeout) is recorded as `unexpected_error` and the others go on. An account-level error (`auth_error`, `quota_exceeded`, `network_error`) skips the remaining batches.
+5. **Finalize:** recalculates device medians, evaluates manual review, and logs one `run-summary` line.
+6. **Stop fck-nat** if this execution started it, also when any step failed.
+
+The execution ends **Failed** when a step failed, or when no price was collected at all (`PriceSync.NoPriceCollected`), so a broken run is visible in the Step Functions console.
+
+### Setup (once)
+
+Put the fck-nat instance id in `cdk.json`, then deploy:
+
+```json
+"context": {
+  "fckNatInstanceId": "i-0123456789abcdef0",
+```
+
+You can also pass it for one deploy with `npx cdk deploy -c fckNatInstanceId=i-...`. The state machine may only start and stop that one instance.
+
+### Run it now
+
+```bash
+aws stepfunctions start-execution --state-machine-arn <PriceSyncStateMachineArn output> --input '{}'
+```
+
+Then check:
+
+- **Step Functions console:** the execution graph. A failed run shows the error and cause.
+- **`update_log`:** one row per device per distributor, all with the execution's start time as `run_at`.
+- **CloudWatch** (Price updater log group): one line per page (`"event":"page"`), and one `"event":"run-summary"` line with `successful`, `byStatus`, `mediansUpdated`, `devicesNeedingReview` and `stoppedBy`.
+- **EC2 console:** fck-nat is stopped again (if it was stopped before the run).
+
+Don't stop an execution by hand while it runs, and keep runs under the state machine's 6-hour timeout: neither runs the cleanup, so fck-nat would stay on. If that happens, stop the instance in the EC2 console.
 
 ## Price Updater: Manual Review
 

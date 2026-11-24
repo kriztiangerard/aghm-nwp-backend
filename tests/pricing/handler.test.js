@@ -6,7 +6,7 @@
 const { describe, test, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  createHandler, ACTIONS, UnknownActionError, NotImplementedError,
+  createHandler, ACTIONS, UnknownActionError, DEFAULT_ACTIONS_FOR_TEST,
 } = require('../../src/pricing/handler');
 const { loadPricingConfig, DEFAULTS } = require('../../src/pricing/config');
 const { probeOutbound, ProbeFailedError, DEFAULT_PROBE_URL } = require('../../src/pricing/probe');
@@ -46,17 +46,8 @@ describe('handler: action routing', () => {
     }
   });
 
-  test('actions from later stories say which story builds them', async () => {
-    const handler = createHandler({ logger: silentLogger() });
-
-    const expected = { plan: 'NWP-PRICE-011', markBatchFailed: 'NWP-PRICE-011', finalize: 'NWP-PRICE-011' };   // process: NWP-PRICE-002, built
-    for (const [action, story] of Object.entries(expected)) {
-      await assert.rejects(handler({ action }), (error) => {
-        assert.ok(error instanceof NotImplementedError);
-        assert.ok(error.message.includes(story), `${action}: ${error.message}`);
-        return true;
-      });
-    }
+  test('every action is built (NWP-PRICE-011 added plan, markBatchFailed and finalize)', () => {
+    for (const action of Object.values(ACTIONS)) assert.equal(typeof DEFAULT_ACTIONS_FOR_TEST[action], 'function', action);
   });
 
   test('a later story can replace an action', async () => {
