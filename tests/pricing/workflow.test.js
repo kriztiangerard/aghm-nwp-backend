@@ -174,7 +174,7 @@ describe('finalize (AC6, AC7)', () => {
 
     await finalizeRun(client, { runAt: RUN_AT }, { includeStale: true, logger: { log() {} } });
 
-    assert.deepEqual(updates, [[11, '3600.00', new Date(RUN_AT)]]);
+    assert.deepEqual(updates, [[11, '3600.00', RUN_AT]]);   // the run's start time, as a UTC string
   });
 
   test('reports an account-level stop (AC6)', async () => {

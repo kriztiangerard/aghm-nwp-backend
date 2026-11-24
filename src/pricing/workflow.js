@@ -177,7 +177,7 @@ async function finalizeRun(client, input, { includeStale = false, logger = conso
   const stoppedBy = readStop(input && input.stop);
 
   const deviceIds = await devicesInRun(client, runAt);
-  const medians = await refreshDeviceMedians(client, deviceIds, { includeStale, updatedAt: new Date(runAt) });
+  const medians = await refreshDeviceMedians(client, deviceIds, { includeStale, updatedAt: runAt });   // stored as UTC (median.js)
   const review = await evaluateManualReview(client, deviceIds);
   const summary = await buildRunSummary(client, runAt);
 
