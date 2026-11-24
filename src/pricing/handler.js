@@ -4,21 +4,21 @@
 //
 // The weekly Step Functions workflow (NWP-PRICE-011) invokes this one function with { action, ... }:
 //
-//   probe            check outbound internet access and that the Firecrawl key can be read   (this story)
+//   probe            check outbound internet access and that the Firecrawl key can be read   (NWP-PRICE-010)
 //   plan             list active sources and group them into batches               (NWP-PRICE-011)
 //   process          scrape and store one vendor x distributor batch, record outcomes (NWP-PRICE-002/004)
 //   markBatchFailed  record a whole batch as failed after a crash or timeout        (NWP-PRICE-011)
 //   finalize         medians, manual review, run result                             (NWP-PRICE-011)
 //
-// Actions not built yet throw NotImplementedError naming their story. An unknown or missing action
-// throws UnknownActionError. Each invocation writes one structured log line.
+// An unknown or missing action throws UnknownActionError. Each invocation writes one structured log line.
 
 const { loadPricingConfig } = require('./config');
 const { probeOutbound } = require('./probe');
 const { getFirecrawlApiKey } = require('./firecrawl-secret');
 const { processSourceBatch } = require('./collect');
 const { recordBatchOutcome } = require('./outcome');
-const { withTransaction } = require('./db');   // NWP-PRICE-007: merge 007 before this branch
+const { withTransaction } = require('./db');
+const { planRun, markBatchFailed, finalizeRun } = require('./workflow');
 
 const ACTIONS = Object.freeze({
   PROBE: 'probe',
@@ -35,19 +35,6 @@ class UnknownActionError extends Error {
   }
 }
 
-class NotImplementedError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'NotImplementedError';
-  }
-}
-
-function notImplemented(action, story) {
-  return async () => {
-    throw new NotImplementedError(`Action "${action}" is not implemented yet (${story}).`);
-  };
-}
-
 const DEFAULT_ACTIONS = Object.freeze({
   // Outbound access first (a ProbeFailedError means fck-nat is not up yet, and the workflow retries), then the
   // Firecrawl key (a failure here is a setup problem, SecretUnavailableError, and is not retried). The key is not returned.
@@ -59,7 +46,8 @@ const DEFAULT_ACTIONS = Object.freeze({
     const database = await probeDatabase();
     return { ...outbound, firecrawlKey: 'readable', ...database };
   },
-  [ACTIONS.PLAN]: notImplemented(ACTIONS.PLAN, 'NWP-PRICE-011'),
+  // event: { action: 'plan', runAt }  (runAt: $$.Execution.StartTime). Returns { runAt, batchCount, sourceCount, batches }.
+  [ACTIONS.PLAN]: async (event) => withTransaction((client) => planRun(client, event)),
   // event: { action: 'process', runAt, vendorId, distributorId, sources: [{ sourceId, sourceUrl }] }
   // Returns the batch summary plus `outcome` ({ recorded, byStatus }). `stoppedBy` is set when an
   // account-level error stopped the batch; the workflow then skips the remaining batches (NWP-PRICE-011).
@@ -68,8 +56,12 @@ const DEFAULT_ACTIONS = Object.freeze({
     const outcome = await withTransaction((client) => recordBatchOutcome(client, summary));
     return { ...summary, outcome };
   },
-  [ACTIONS.MARK_BATCH_FAILED]: notImplemented(ACTIONS.MARK_BATCH_FAILED, 'NWP-PRICE-011'),
-  [ACTIONS.FINALIZE]: notImplemented(ACTIONS.FINALIZE, 'NWP-PRICE-011'),
+  // event: { action: 'markBatchFailed', batch: <the batch>, error: { Error, Cause } }  (the Map item's Catch)
+  [ACTIONS.MARK_BATCH_FAILED]: async (event) => withTransaction((client) => markBatchFailed(client, event)),
+  // event: { action: 'finalize', runAt, stop: null | { Error, Cause } }  (stop: the account-level stop the Map caught)
+  [ACTIONS.FINALIZE]: async (event, { config }) => withTransaction(
+    (client) => finalizeRun(client, event, { includeStale: config.medianIncludeStale }),
+  ),
 });
 
 /**
@@ -112,5 +104,5 @@ module.exports = {
   createHandler,
   ACTIONS,
   UnknownActionError,
-  NotImplementedError,
+  DEFAULT_ACTIONS_FOR_TEST: DEFAULT_ACTIONS,
 };
