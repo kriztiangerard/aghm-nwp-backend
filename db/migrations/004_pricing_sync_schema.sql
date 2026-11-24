@@ -12,13 +12,18 @@
 --   1. pricing: one row per device and distributor (UNIQUE), checked first.
 --   2. pricing.pricing_id and update_log.upd_log_id get IDENTITY defaults, so parallel sync batches
 --      (NWP-PRICE-011) no longer compute ids with MAX + 1 and collide.
---   3. Identity sequences of vendor, distributor, pricing_source and device are moved past their
---      current maximum (rows inserted with explicit ids do not advance them).
---   4. Failure-tracking columns confirmed, plus CHECK (consecutive_failure_count >= 0).
---   5. Indexes: pricing.source_id (failure attribution), update_log run_at and latest-status lookups.
---   6. Column comments.
+--   3. Failure-tracking columns confirmed, plus CHECK (consecutive_failure_count >= 0).
+--   4. Indexes: pricing.source_id (failure attribution), update_log run_at and latest-status lookups.
+--   5. Column comments.
+--   6. Identity sequences of pricing, update_log, vendor, distributor, pricing_source and device are moved
+--      FORWARD past their table's highest id, only when they are behind it (rows inserted with explicit ids
+--      do not advance them). A sequence that is already ahead, or a sequence of an empty table, is left
+--      exactly as it is, so a second run changes nothing.
 --
 -- Safe to run more than once. Runs in one transaction: if a guard stops it, nothing is applied.
+-- Sequence changes (setval) are not undone by a rollback, so they run last: a failure in steps 1 to 5
+-- leaves every sequence untouched. They only ever move forward, so even a later failure cannot cause an
+-- id collision; at most some ids are skipped.
 -- Run scripts/pricing-schema-precheck.sql first to see anything the guard would stop on;
 -- run scripts/pricing-schema-check.sql afterwards to confirm. Rollback: db/migrations/rollback/.
 
@@ -78,43 +83,7 @@ BEGIN
 END $$;
 
 -- ============================================================
--- 3. Move identity sequences past existing ids
--- ============================================================
--- Rows inserted with explicit ids (MAX + 1 in older scripts and migrations) do not advance an
--- identity sequence, so the next default id could collide. setval(..., max, true) makes the next
--- value max + 1; an empty table restarts at 1.
-
-DO $$
-DECLARE
-    target RECORD;
-    seq TEXT;
-    max_id BIGINT;
-BEGIN
-    FOR target IN
-        SELECT * FROM (VALUES
-            ('pricing', 'pricing_id'),
-            ('update_log', 'upd_log_id'),
-            ('vendor', 'vendor_id'),
-            ('distributor', 'distributor_id'),
-            ('pricing_source', 'source_id'),
-            ('device', 'device_id')
-        ) AS t(table_name, column_name)
-    LOOP
-        seq := pg_get_serial_sequence('public.' || target.table_name, target.column_name);
-        IF seq IS NULL THEN
-            CONTINUE;   -- not an identity/serial column in this database
-        END IF;
-        EXECUTE format('SELECT max(%I) FROM public.%I', target.column_name, target.table_name) INTO max_id;
-        IF max_id IS NULL THEN
-            PERFORM setval(seq, 1, false);
-        ELSE
-            PERFORM setval(seq, max_id, true);
-        END IF;
-    END LOOP;
-END $$;
-
--- ============================================================
--- 4. Failure-tracking columns (already in 001; confirmed here)
+-- 3. Failure-tracking columns (already in 001; confirmed here)
 -- ============================================================
 
 ALTER TABLE pricing ADD COLUMN IF NOT EXISTS is_stale BOOLEAN NOT NULL DEFAULT FALSE;
@@ -134,7 +103,7 @@ BEGIN
 END $$;
 
 -- ============================================================
--- 5. Indexes
+-- 4. Indexes
 -- ============================================================
 
 -- Devices last priced from a listing page (failure attribution, NWP-PRICE-004/005).
@@ -145,7 +114,7 @@ CREATE INDEX IF NOT EXISTS update_log_run_at_idx ON update_log (run_at);
 CREATE INDEX IF NOT EXISTS update_log_device_distributor_run_at_idx ON update_log (device_id, distributor_id, run_at DESC);
 
 -- ============================================================
--- 6. Column documentation
+-- 5. Column documentation
 -- ============================================================
 
 COMMENT ON COLUMN pricing.source_id IS
@@ -160,5 +129,41 @@ COMMENT ON COLUMN update_log.error IS
     'Details of any synchronization failure (retrieval, extraction, validation or database update).';
 COMMENT ON COLUMN update_log.run_at IS
     'Start time of the synchronization run; shared by every row of the same run. NWP-PRICE-004.';
+
+-- ============================================================
+-- 6. Move identity sequences forward past existing ids (last: setval is not transactional)
+-- ============================================================
+-- Rows inserted with explicit ids (MAX + 1 in older scripts and migrations) do not advance an identity
+-- sequence, so the next default id could collide with them. A sequence is moved only when the id it
+-- would hand out next is not above the table's highest id; then setval(seq, max, true) makes the next
+-- value max + 1. An empty table, or a sequence already ahead, is left alone (never moved backwards).
+
+DO $$
+DECLARE
+    target RECORD;
+    seq TEXT;
+    max_id BIGINT;
+    next_id BIGINT;
+BEGIN
+    FOR target IN
+        SELECT * FROM (VALUES
+            ('pricing', 'pricing_id'),
+            ('update_log', 'upd_log_id'),
+            ('vendor', 'vendor_id'),
+            ('distributor', 'distributor_id'),
+            ('pricing_source', 'source_id'),
+            ('device', 'device_id')
+        ) AS t(table_name, column_name)
+    LOOP
+        seq := pg_get_serial_sequence('public.' || target.table_name, target.column_name);
+        CONTINUE WHEN seq IS NULL;   -- not an identity/serial column in this database
+        EXECUTE format('SELECT max(%I) FROM public.%I', target.column_name, target.table_name) INTO max_id;
+        CONTINUE WHEN max_id IS NULL;   -- empty table: nothing to collide with
+        EXECUTE format('SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END FROM %s', seq) INTO next_id;
+        IF next_id <= max_id THEN
+            PERFORM setval(seq, max_id, true);
+        END IF;
+    END LOOP;
+END $$;
 
 COMMIT;
