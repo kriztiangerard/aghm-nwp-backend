@@ -11,6 +11,7 @@ module.exports = Object.freeze({
   U_HP: 0.65,                              // PARAM: High-Performance AP utilisation target (midpoint of 60-70%)
   G_BY_BAND: { '0-10': 0.15, '11-30': 0.30, '31+': 0.50 },  // PARAM: band upper bounds; Q25 = No -> 0
   POE_HEADROOM: 1.2,                       // SOURCED: 20% headroom, both plans
+    HP_HEADROOM_MAX: 0.30,                   // SOURCED (manuscript): High-Performance upper bound on managed-device headroom; NWP-ENGINE-018 controller pick
   POE_CLASS_W: { af: 15.4, at: 30, bt3: 60 },               // IEEE 802.3 PSE class maxima
   UPS_LOAD_RATIO: 0.8,                     // UNSOURCED: keep load <= 80% of UPS rating
   WALL_CABINET_MAX_U: 9,                   // PARAM: "not sure" housing threshold
