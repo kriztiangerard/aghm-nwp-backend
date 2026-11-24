@@ -40,6 +40,12 @@ describe('computeMedian', () => {
   test('is integer arithmetic: no floating-point drift on large or awkward amounts', () => {
     assert.equal(computeMedian([10, 20]), 15);
     assert.equal(computeMedian([Number.MAX_SAFE_INTEGER - 1, Number.MAX_SAFE_INTEGER - 1]), Number.MAX_SAFE_INTEGER - 1);
+    // QA-008-02: exact even when the two middle values add up past Number.MAX_SAFE_INTEGER
+    const M = Number.MAX_SAFE_INTEGER;
+    assert.equal(computeMedian([M - 3, M - 2]), M - 2);   // half-up
+    assert.equal(computeMedian([M, M]), M);
+    assert.equal(computeMedian([M - 2, M]), M - 1);
+    assert.equal(computeMedian([0, M]), (M + 1) / 2);     // 2^52, exact
     for (const value of [computeMedian([33, 34]), computeMedian([7, 8, 9, 10])]) assert.ok(Number.isInteger(value));
   });
 
