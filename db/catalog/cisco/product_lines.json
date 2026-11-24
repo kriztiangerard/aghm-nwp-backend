@@ -1,0 +1,44 @@
+[
+  {
+    "vendor_id": 6,
+    "category": "switch",
+    "name": "Cisco Business 110",
+    "line_rank": 1,
+    "source_note": "Cisco 110 datasheet: unmanaged Gigabit access switching."
+  },
+  {
+    "vendor_id": 6,
+    "category": "switch",
+    "name": "Cisco Business 250",
+    "line_rank": 2,
+    "source_note": "Cisco 250 datasheet: smart switching with VLANs, static routing, and fiber uplinks."
+  },
+  {
+    "vendor_id": 6,
+    "category": "switch",
+    "name": "Cisco Business 350",
+    "line_rank": 3,
+    "source_note": "Cisco 350 datasheet: managed switching with additional Layer 3 and stacking features across the series."
+  },
+  {
+    "vendor_id": 6,
+    "category": "ap",
+    "name": "Cisco Business 100 AC",
+    "line_rank": 1,
+    "source_note": "Cisco 140AC datasheet: entry-tier 2x2 Wi-Fi 5."
+  },
+  {
+    "vendor_id": 6,
+    "category": "ap",
+    "name": "Cisco Business 200 AC",
+    "line_rank": 2,
+    "source_note": "Cisco 240AC datasheet: four spatial streams and 4x4 Wi-Fi 5."
+  },
+  {
+    "vendor_id": 6,
+    "category": "ap",
+    "name": "Cisco Business 100 AX",
+    "line_rank": 3,
+    "source_note": "Cisco 150AX datasheet: Wi-Fi 6 adds OFDMA, WPA3, and target wake time."
+  }
+]
