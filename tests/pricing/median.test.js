@@ -13,6 +13,7 @@ const { loadPricingConfig } = require('../../src/pricing/config');
 const { derivePriceProvenance } = require('../../src/types/engine/price-provenance');
 
 const RUN_AT = new Date('2026-11-23T02:00:00.000Z');
+const RUN_AT_UTC = '2026-11-23T02:00:00.000Z';   // what price_updated_at is sent as
 const sync = (price, isStale = false) => ({ price, source_id: 1, is_stale: isStale });
 const manual = (price) => ({ price, source_id: null, is_stale: false });
 
@@ -123,7 +124,7 @@ describe('refreshDeviceMedians', () => {
 
     const result = await refreshDeviceMedians(client, [11], { updatedAt: RUN_AT });
 
-    assert.deepEqual(updates, [[11, '3550.00', RUN_AT]]);
+    assert.deepEqual(updates, [[11, '3550.00', RUN_AT_UTC]]);
     assert.deepEqual(result, { updated: [{ deviceId: 11, price: '3550.00', prices: 3 }], unchanged: [] });
     assert.deepEqual(query.mock.calls[0].arguments[1], [[11]]);
     assert.match(query.mock.calls[1].arguments[0], /UPDATE device SET price = \$2, price_updated_at = \$3 WHERE device_id = \$1/);
@@ -137,7 +138,7 @@ describe('refreshDeviceMedians', () => {
 
     const result = await refreshDeviceMedians(client, [12, 11, 13, 11], { updatedAt: RUN_AT });
 
-    assert.deepEqual(updates, [[13, '2100.00', RUN_AT]]);
+    assert.deepEqual(updates, [[13, '2100.00', RUN_AT_UTC]]);
     assert.deepEqual(result.unchanged, [11, 12]);   // 11: only stale; 12: no rows at all
   });
 
@@ -145,7 +146,18 @@ describe('refreshDeviceMedians', () => {
     const rows = [{ device_id: 11, ...sync('3400') }, { device_id: 11, ...sync('3600', true) }];
     const withStale = fakeClient(rows);
     await refreshDeviceMedians(withStale.client, [11], { includeStale: true, updatedAt: RUN_AT });
-    assert.deepEqual(withStale.updates, [[11, '3500.00', RUN_AT]]);
+    assert.deepEqual(withStale.updates, [[11, '3500.00', RUN_AT_UTC]]);
+  });
+
+  test('sends price_updated_at as a UTC string, from a Date or from the runAt string', async () => {
+    const rows = [{ device_id: 11, price: '3400', source_id: 1, is_stale: false }];
+    const fromDate = fakeClient(rows);
+    await refreshDeviceMedians(fromDate.client, [11], { updatedAt: RUN_AT });
+    const fromString = fakeClient(rows);
+    await refreshDeviceMedians(fromString.client, [11], { updatedAt: '2026-11-23T10:00:00+08:00' });   // same moment, PH offset
+    assert.equal(fromDate.updates[0][2], RUN_AT_UTC);
+    assert.equal(fromString.updates[0][2], RUN_AT_UTC);
+    await assert.rejects(refreshDeviceMedians(fromDate.client, [11], { updatedAt: 'last sunday' }), TypeError);
   });
 
   test('does nothing for no devices, and validates its input', async () => {

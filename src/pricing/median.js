@@ -87,6 +87,13 @@ async function refreshDeviceMedians(client, deviceIds, { includeStale = false, u
     throw new TypeError('refreshDeviceMedians: deviceIds must be an array of integers.');
   }
   if (typeof includeStale !== 'boolean') throw new TypeError('refreshDeviceMedians: includeStale must be a boolean.');
+  // price_updated_at is sent as a UTC ISO string, never a Date: node-pg sends a Date in the machine's local
+  // time, and the TIMESTAMP column (no time zone) would keep PH time from a laptop but UTC from the Lambda.
+  const updatedAtDate = updatedAt instanceof Date ? updatedAt : new Date(updatedAt);
+  if (Number.isNaN(updatedAtDate.getTime())) {
+    throw new TypeError('refreshDeviceMedians: updatedAt must be a valid Date or ISO date string.');
+  }
+  const updatedAtUtc = updatedAtDate.toISOString();
   const ids = [...new Set(deviceIds)].sort((a, b) => a - b);
   if (ids.length === 0) return { updated: [], unchanged: [] };
 
@@ -112,7 +119,7 @@ async function refreshDeviceMedians(client, deviceIds, { includeStale = false, u
     // eslint-disable-next-line no-await-in-loop
     await client.query(
       'UPDATE device SET price = $2, price_updated_at = $3 WHERE device_id = $1',
-      [deviceId, price, updatedAt],
+      [deviceId, price, updatedAtUtc],
     );
     updated.push({ deviceId, price, prices: used });
   }
