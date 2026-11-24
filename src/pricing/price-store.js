@@ -36,7 +36,10 @@ async function upsertSynchronizedPrice(client, record) {
             source_id    = EXCLUDED.source_id,
             last_updated = EXCLUDED.last_updated
      RETURNING pricing_id, (xmax = 0) AS inserted`,
-    [deviceId, distributorId, sourceId, price, retrievedAt],
+    // Sent as a UTC ISO string, not a Date: node-pg sends a Date in the machine's local time, and a
+    // TIMESTAMP column (no time zone) keeps that wall-clock time, so a run from a PH-time laptop would
+    // store PH time while the Lambda stores UTC. All pricing timestamps are UTC.
+    [deviceId, distributorId, sourceId, price, retrievedAt.toISOString()],
   );
   return { pricingId: Number(rows[0].pricing_id), inserted: rows[0].inserted === true };
 }
