@@ -217,6 +217,14 @@ The `PriceSync` Standard state machine (`lib/price-sync-workflow.ts`) runs every
   ```
 - **The execution fails** when any step fails (after stopping fck-nat, if it started it), or when `successful` is false (`PriceSync.NoPriceCollected`).
 
+## Timestamps
+
+Every timestamp the Price updater writes (`pricing.last_updated`, `update_log.run_at`, `device.price_updated_at`) is stored as **UTC**.
+
+- The columns are `TIMESTAMP` without a time zone (ERD), so they keep whatever wall-clock time they're given.
+- The code therefore always sends UTC ISO strings (`toISOString()`), never JavaScript `Date` objects. node-pg would send a `Date` in the machine's local time, so a run or a `pricing:set-manual` from a PH-time laptop would store PH time, while the Lambda stores UTC.
+- Read them as UTC. In PH time, a run at Sunday 02:00 shows as Saturday 18:00.
+
 ## Price normalization (NWP-PRICE-003)
 
 Every product Firecrawl extracts from a listing page is normalized and validated before anything is stored.
