@@ -153,7 +153,7 @@ describe('setManualPrice', () => {
     assert.match(upsert[0], /VALUES \(\$1, \$2, NULL, \$3, \$4, FALSE, 0, FALSE\)/);
     assert.match(upsert[0], /ON CONFLICT \(device_id, distributor_id\) DO UPDATE[\s\S]*source_id = NULL[\s\S]*is_stale = FALSE[\s\S]*consecutive_failure_count = 0[\s\S]*needs_manual_review = FALSE/);
     assert.doesNotMatch(upsert[0].split('VALUES')[0], /pricing_id/);
-    assert.deepEqual(upsert[1], [11, 3, '3450.00', VERIFIED]);
+    assert.deepEqual(upsert[1], [11, 3, '3450.00', '2026-11-24T09:00:00.000Z']);   // UTC string, never a local-time Date
     assert.deepEqual(refreshMedians.mock.calls[0].arguments[1], [11]);
     assert.deepEqual(result, {
       deviceId: 11, vendor: 'TP-Link Omada', sku: 'ER605', name: 'Router', distributorId: 3, distributor: 'PC Express',

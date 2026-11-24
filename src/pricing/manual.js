@@ -84,7 +84,9 @@ async function setManualPrice(client, input, { refreshMedians = null, now = () =
             is_stale = FALSE,
             consecutive_failure_count = 0,
             needs_manual_review = FALSE`,
-    [deviceId, distributorId, parsed.decimal, now()],
+    // UTC ISO string, not a Date: this script runs on a team member's PH-time laptop, and node-pg would send
+    // a Date in local time, which a TIMESTAMP column (no time zone) keeps as PH time. All pricing times are UTC.
+    [deviceId, distributorId, parsed.decimal, now().toISOString()],
   );
 
   const review = await evaluateManualReview(client, [deviceId]);
