@@ -1,0 +1,114 @@
+[
+  {
+    "vendor_id": 5,
+    "category": "gateway_router",
+    "name": "Gigabit Multi-WAN VPN Routers (GWN700x)",
+    "line_rank": 1,
+    "source_note": "Grandstream's GWN700x wired Multi-WAN VPN router series (GWN7001/GWN7002/GWN7003): 2.2 Gbps NAT routing, 530 Mbps IPsec VPN, embedded controller for 100-150 GWN APs. Lowest routing and VPN throughput of the Grandstream gateways in this catalog. Ranking is team-derived from published throughput, not a Grandstream-published ladder."
+  },
+  {
+    "vendor_id": 5,
+    "category": "gateway_router",
+    "name": "2.5G Convergence Gateways (GCC601x)",
+    "line_rank": 2,
+    "source_note": "Grandstream GCC6010 Series UC + Networking Convergence devices (VPN router + NGFW + IP PBX + switch). Published 2.5 Gbps routing, 1 Gbps IPsec VPN, 900 Mbps IDS/IPS, 160K NAT sessions; first Grandstream gateway tier with a published IDS/IPS figure. Ranked above GWN700x on routing, VPN and security throughput. Team-derived, not a Grandstream-published ladder."
+  },
+  {
+    "vendor_id": 5,
+    "category": "gateway_router",
+    "name": "10G Convergence Gateways (GCC602x)",
+    "line_rank": 3,
+    "source_note": "Grandstream GCC6020 Series UC + Networking Convergence devices with 10G SFP+. Published 6.5-10 Gbps routing, 1.3 Gbps IPsec VPN, 6-9 Gbps NGFW (DPI+IPS), 320K NAT sessions. Highest-throughput Grandstream gateways in this catalog. Team-derived, not a Grandstream-published ladder."
+  },
+  {
+    "vendor_id": 5,
+    "category": "switch",
+    "name": "L2 Lite Managed (GWN771x)",
+    "line_rank": 1,
+    "source_note": "Grandstream markets the GWN7711(P)/GWN7712P/GWN7713P as Layer 2 Lite managed switches with Gigabit copper and 1G SFP uplinks; the entry managed tier by Grandstream's own L2 Lite / L2+ / L3 / L3 Aggregation series naming."
+  },
+  {
+    "vendor_id": 5,
+    "category": "switch",
+    "name": "L2 Lite Managed Multi-Gigabit (GWN7721)",
+    "line_rank": 2,
+    "source_note": "Grandstream markets the GWN7721 Series as Layer 2 Lite managed, the same management tier as GWN771x, but with 2.5GbE copper and 10G SFP+ uplinks (80 Gbps switching). Splitting it above GWN771x and below the L2+ GWN780x series is the team's judgment so the High-Performance step from an L2 Lite pick stays within the L2 Lite tier first."
+  },
+  {
+    "vendor_id": 5,
+    "category": "switch",
+    "name": "L2+ Managed (GWN780x)",
+    "line_rank": 3,
+    "source_note": "Grandstream markets the GWN7801(P)/GWN7802(P)/GWN7803(P)/GWN7806(P) as Enterprise Layer 2+ managed switches, following Grandstream's L2 Lite / L2+ / L3 / L3 Aggregation series tiering."
+  },
+  {
+    "vendor_id": 5,
+    "category": "switch",
+    "name": "L3 Managed (GWN781x)",
+    "line_rank": 4,
+    "source_note": "Grandstream markets the GWN7811(P)/GWN7812P/GWN7813(P)/GWN7816(P) as Layer 3 managed switches with 10G SFP+ uplinks and static/dynamic routing, following Grandstream's L2 Lite / L2+ / L3 / L3 Aggregation series tiering."
+  },
+  {
+    "vendor_id": 5,
+    "category": "switch",
+    "name": "L3 Aggregation (GWN783x)",
+    "line_rank": 5,
+    "source_note": "Grandstream markets the GWN7830/GWN7831/GWN7832 as Layer 3 aggregation switches (fiber-dense, up to 12x 10G SFP+, up to 240 Gbps switching); top tier of Grandstream's switch series naming."
+  },
+  {
+    "vendor_id": 5,
+    "category": "ap",
+    "name": "Wi-Fi 6 AX1800",
+    "line_rank": 1,
+    "source_note": "Derived from this catalog: Wi-Fi standard first, then max_data_rate_mbps (sum of Grandstream's published per-band 802.11ax/be maximum rates). Not a Grandstream-published ladder."
+  },
+  {
+    "vendor_id": 5,
+    "category": "ap",
+    "name": "Wi-Fi 6 AX3000",
+    "line_rank": 2,
+    "source_note": "Derived from this catalog: Wi-Fi standard first, then max_data_rate_mbps (sum of Grandstream's published per-band 802.11ax/be maximum rates). Not a Grandstream-published ladder."
+  },
+  {
+    "vendor_id": 5,
+    "category": "ap",
+    "name": "Wi-Fi 6 AX3600 4x4",
+    "line_rank": 3,
+    "source_note": "Derived from this catalog: Wi-Fi standard first, then max_data_rate_mbps (sum of Grandstream's published per-band 802.11ax/be maximum rates). Not a Grandstream-published ladder."
+  },
+  {
+    "vendor_id": 5,
+    "category": "ap",
+    "name": "Wi-Fi 6 AX5400",
+    "line_rank": 4,
+    "source_note": "Derived from this catalog: Wi-Fi standard first, then max_data_rate_mbps (sum of Grandstream's published per-band 802.11ax/be maximum rates). Not a Grandstream-published ladder."
+  },
+  {
+    "vendor_id": 5,
+    "category": "ap",
+    "name": "Wi-Fi 6 AX6000",
+    "line_rank": 5,
+    "source_note": "Derived from this catalog: Wi-Fi standard first, then max_data_rate_mbps (sum of Grandstream's published per-band 802.11ax/be maximum rates). Not a Grandstream-published ladder."
+  },
+  {
+    "vendor_id": 5,
+    "category": "ap",
+    "name": "Wi-Fi 7 BE3600",
+    "line_rank": 6,
+    "source_note": "Derived from this catalog: Wi-Fi standard first, then max_data_rate_mbps (sum of Grandstream's published per-band 802.11ax/be maximum rates). Not a Grandstream-published ladder."
+  },
+  {
+    "vendor_id": 5,
+    "category": "ap",
+    "name": "Wi-Fi 7 BE11000 Tri-Band",
+    "line_rank": 7,
+    "source_note": "Derived from this catalog: Wi-Fi standard first, then max_data_rate_mbps. The GWN7672 rate is Grandstream's advertised BE11000 aggregate because its 6 GHz per-band rate is not published. Not a Grandstream-published ladder."
+  },
+  {
+    "vendor_id": 5,
+    "category": "ap",
+    "name": "Wi-Fi 7 BE21000 Tri-Band",
+    "line_rank": 8,
+    "source_note": "Derived from this catalog: Wi-Fi standard first, then max_data_rate_mbps (sum of Grandstream's published per-band 802.11be maximum rates). Not a Grandstream-published ladder."
+  }
+]
