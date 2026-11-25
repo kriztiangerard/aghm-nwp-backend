@@ -51,7 +51,10 @@ const DEFAULT_ACTIONS = Object.freeze({
   [ACTIONS.PROBE]: async () => {
     const outbound = await probeOutbound();
     await getFirecrawlApiKey();
-    return { ...outbound, firecrawlKey: 'readable' };
+    // RDS last (AC1): no internet needed, so a failure here is a VPC or database problem, not fck-nat.
+    const { probeDatabase } = require('./probe');   // required here so the import block above stays as later stories have it
+    const database = await probeDatabase();
+    return { ...outbound, firecrawlKey: 'readable', ...database };
   },
   [ACTIONS.PLAN]: notImplemented(ACTIONS.PLAN, 'NWP-PRICE-011'),
   [ACTIONS.PROCESS]: notImplemented(ACTIONS.PROCESS, 'NWP-PRICE-002'),
