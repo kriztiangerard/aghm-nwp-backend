@@ -12,21 +12,12 @@
 const { parseArgs } = require('node:util');
 const { withTransaction, closePool } = require('../src/pricing/db');
 const { setManualPrice, ManualPriceError } = require('../src/pricing/manual');
+const { refreshDeviceMedians } = require('../src/pricing/median');
+const { loadPricingConfig } = require('../src/pricing/config');
 
 const USAGE = 'Usage: npm run pricing:set-manual -- --vendor "<vendor>" --sku <sku> --distributor <id> --price <amount> [--dry-run]';
 
 class DryRun extends Error {}
-
-/** refreshDeviceMedians from NWP-PRICE-008, or null while that story isn't merged. */
-function loadRefreshMedians() {
-  try {
-    // eslint-disable-next-line global-require
-    return require('../src/pricing/median').refreshDeviceMedians || null;
-  } catch (error) {
-    if (error && error.code === 'MODULE_NOT_FOUND' && /src[\\/]pricing[\\/]median/.test(error.message)) return null;
-    throw error;
-  }
-}
 
 async function main() {
   const { values } = parseArgs({
@@ -45,7 +36,9 @@ async function main() {
     return;
   }
 
-  const refreshMedians = loadRefreshMedians();
+  // The median uses the same stale option as the weekly sync (PRICE_MEDIAN_INCLUDE_STALE, default false).
+  const { medianIncludeStale } = loadPricingConfig();
+  const refreshMedians = (client, deviceIds) => refreshDeviceMedians(client, deviceIds, { includeStale: medianIncludeStale });
   let result;
   try {
     await withTransaction(async (client) => {
@@ -62,7 +55,7 @@ async function main() {
   console.log(`${verb} ${result.vendor} ${result.sku} (${result.name}) at ${result.distributor} to PHP ${result.price} as a manual price.`);
   console.log(`  previous row: ${result.replaced === 'inserted' ? 'none (new row)' : `${result.replaced} price`}`);
   console.log(`  manual review: ${result.stillNeedsReview ? 'STILL FLAGGED (unexpected; check the device\'s pricing rows)' : 'cleared (a device with a manual price is not flagged)'}`);
-  console.log(`  device median: ${result.medianRefreshed ? 'recalculated' : 'NOT recalculated (NWP-PRICE-008 is not merged yet)'}`);
+  console.log(`  device price: ${result.devicePrice === null ? 'unchanged (no fresh prices)' : `median is now PHP ${result.devicePrice}`}`);
   if (values['dry-run']) console.log('Dry run: nothing was saved.');
 }
 

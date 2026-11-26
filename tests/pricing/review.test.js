@@ -145,7 +145,7 @@ describe('setManualPrice', () => {
 
   test('stores a manual row with stale, failure and review state cleared (AC7)', async () => {
     const { client, statements } = fakeClient({ devices: omada, before: [{ source_id: 9 }] });
-    const refreshMedians = mock.fn(async () => {});
+    const refreshMedians = mock.fn(async () => ({ updated: [{ deviceId: 11, price: '3500.00', prices: 2 }], unchanged: [] }));
 
     const result = await setManualPrice(client, input, { refreshMedians, now: () => VERIFIED });
 
@@ -157,7 +157,7 @@ describe('setManualPrice', () => {
     assert.deepEqual(refreshMedians.mock.calls[0].arguments[1], [11]);
     assert.deepEqual(result, {
       deviceId: 11, vendor: 'TP-Link Omada', sku: 'ER605', name: 'Router', distributorId: 3, distributor: 'PC Express',
-      price: '3450.00', replaced: 'synchronized', stillNeedsReview: false, medianRefreshed: true,
+      price: '3450.00', replaced: 'synchronized', stillNeedsReview: false, medianRefreshed: true, devicePrice: '3500.00',
     });
   });
 
@@ -171,7 +171,7 @@ describe('setManualPrice', () => {
     assert.ok(order > upsertAt);
     assert.equal(result.stillNeedsReview, false);   // a manual price clears the flag, even with other distributors failing
     assert.equal(result.replaced, 'inserted');
-    assert.equal(result.medianRefreshed, false);   // no refreshMedians (NWP-PRICE-008 not merged)
+    assert.equal(result.medianRefreshed, false);   // no refreshMedians passed in this test
   });
 
   test('rejects an unusable price, an unknown device or distributor, and missing arguments', async () => {
