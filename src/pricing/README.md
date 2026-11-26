@@ -11,7 +11,11 @@ Tests are in `tests/pricing/` and run with `node --test tests/pricing/*.test.js`
 | `handler.js` | 010 | Lambda entry point. Dispatches on `event.action`: `probe`, `plan`, `process`, `markBatchFailed`, `finalize`. Actions not built yet throw `NotImplementedError` naming their story. |
 | `collect.js` | 002, 004 | `processSourceBatch()`: the `process` action's collection step. Scrapes one batch (with retry and failure isolation), combines its pages, stores found prices, returns a summary. |
 | `outcome.js` | 004 | `recordBatchOutcome()` (one `update_log` row per device), `attributeOutcomes()`, `loadTrackedRows()`, `getRunResult()`. |
-| `pricing-state.js` | 005 | `markSyncFailure()` (marks a synchronized row stale; never inserts, deletes or changes the price) and `markSyncSuccess()` (clears it). |
+| `pricing-state.js` | 005, 006 | `markSyncFailure()` (stale, failure count + 1; never inserts, deletes or changes the price), `markSyncSuccess()` (not stale, count 0), `evaluateManualReview()`. |
+| `review.js` | 006 | `listDevicesNeedingReview()`, `countDevicesNeedingReview()`, `devicesInRun()`, `buildRunSummary()`. |
+| `manual.js` | 006 | `setManualPrice()`, used by `npm run pricing:set-manual`. |
+| `median.js` | 008 | `refreshDeviceMedians()`: sets `device.price` to the median of its fresh prices. `computeMedian()` (integer centavos, half-up), `medianForRows()`, `decimalToCentavos()`, `centavosToDecimal()`. |
+| `constants.js` | 006 | `MANUAL_REVIEW_THRESHOLD = 3` (SOURCED: manuscript). |
 | `sync-status.js` | 004 | `SYNC_STATUS`: the one list of outcomes for pages, devices and `update_log.status`; `RETRYABLE`, `ACCOUNT_LEVEL`. |
 | `extraction.js` | 002 | `LISTING_SCHEMA`, the Firecrawl JSON schema for a listing page (`{ products: [{ sku, name, price }] }`), and `readProducts()`. |
 | `sources.js` | 002 | `listActiveSources()` and `loadVendorSkuIndex()`. |
@@ -161,6 +165,24 @@ Staleness is stored per `pricing` row, so per device and distributor.
 - **Sync succeeds** (`markSyncSuccess()`): the new price is stored and `is_stale` is cleared, in the same transaction.
 - **Engine:** a device counts as stale only when **every** pricing row is stale (`price-provenance.js`, NWP-ENGINE-006). Its BOM lines then carry `isStale`, and the plan gets the `BOM_PRICE_STALE` advisory with each SKU's last verified date. A device with any fresh or manual row is never shown as stale.
 - Nothing in `src/pricing/` deletes `pricing` rows.
+
+## Consecutive failures and manual review (NWP-PRICE-006)
+
+- **Count:** `markSyncFailure()` adds 1 to the row's `consecutive_failure_count` in the same statement that marks it stale; `markSyncSuccess()` resets it to 0. Manual rows are never counted.
+- **Flag:** at finalize, `evaluateManualReview(client, devicesInRun(runAt))` sets `needs_manual_review` on each device's synchronized rows to whether **every** synchronized row has a count of at least `MANUAL_REVIEW_THRESHOLD` (3) **and** the device has no manual price. One row below 3, or one manual row, keeps the device unflagged; a success (count 0) clears the flag at the next finalize. Running it twice gives the same result.
+- **Run summary:** `buildRunSummary(client, runAt)` returns the run result plus `devicesNeedingReview`; finalize (NWP-PRICE-011) logs it as one JSON line.
+- **Review and manual prices:** `npm run pricing:review` and `npm run pricing:set-manual` (see the backend README, "Price Updater: Manual Review"). A manual price is stored with `source_id` NULL and clears that row's stale, count and review state; the device is then re-evaluated and its median recalculated (`refreshDeviceMedians()`, NWP-PRICE-008).
+
+## Median price (NWP-PRICE-008)
+
+`device.price` is the median of the device's `pricing` rows, so one odd listing can't move it.
+
+- **Which rows:** fresh rows only: synchronized rows that aren't stale, plus manual rows (`source_id` NULL), which always count as fresh. With `PRICE_MEDIAN_INCLUDE_STALE=true`, stale synchronized rows join in, but only when at least one fresh row exists.
+- **No fresh rows:** `device.price` and `price_updated_at` are left exactly as they are, so the last median stays in use (and the engine shows it as stale). A device with no rows at all keeps `price` NULL.
+- **Arithmetic:** in integer centavos. An even count takes the mean of the two middle values; a half centavo rounds up (₱3,450.00 and ₱3,450.01 give ₱3,450.01).
+- **Written:** `UPDATE device SET price, price_updated_at` with `price_updated_at` set to the run time (`updatedAt`; finalize, NWP-PRICE-011, passes `runAt`). `pricing` is never changed here.
+- **Called by:** `npm run pricing:set-manual` after a manual price, and finalize for every device in the run: `refreshDeviceMedians(client, deviceIds, { includeStale, updatedAt })`, which returns `{ updated: [{ deviceId, price, prices }], unchanged: [deviceId] }`.
+- **Provenance:** unchanged. The engine still reports `price_source: 'manual'` for any device with a manual row (`price-provenance.js`, NWP-ENGINE-006).
 
 ## Price normalization (NWP-PRICE-003)
 

@@ -16,17 +16,18 @@ const { derivePriceProvenance } = require('../../src/types/engine/price-provenan
 const PAIR = { deviceId: 11, distributorId: 7 };
 
 function recordingClient(rowCount = 1) {
-  return { query: mock.fn(async () => ({ rowCount, rows: [] })) };
+  const rows = rowCount > 0 ? [{ consecutive_failure_count: 2 }] : [];
+  return { query: mock.fn(async () => ({ rowCount, rows })) };
 }
 
 describe('markSyncFailure', () => {
-  test('marks only the synchronized row of that pair stale (AC1, AC5)', async () => {
+  test('marks only the synchronized row of that pair stale and counts the failure (005 AC1, AC5; 006 AC1)', async () => {
     const client = recordingClient(1);
 
-    assert.deepEqual(await markSyncFailure(client, PAIR), { updated: true });
+    assert.deepEqual(await markSyncFailure(client, PAIR), { updated: true, consecutiveFailures: 2 });
 
     const [sql, params] = client.query.mock.calls[0].arguments;
-    assert.match(sql, /^\s*UPDATE pricing\s+SET is_stale = TRUE\s+WHERE device_id = \$1\s+AND distributor_id = \$2\s+AND source_id IS NOT NULL\s*$/);
+    assert.match(sql, /^\s*UPDATE pricing\s+SET is_stale = TRUE,\s+consecutive_failure_count = consecutive_failure_count \+ 1\s+WHERE device_id = \$1\s+AND distributor_id = \$2\s+AND source_id IS NOT NULL\s+RETURNING consecutive_failure_count\s*$/);
     assert.deepEqual(params, [11, 7]);
   });
 
@@ -35,12 +36,12 @@ describe('markSyncFailure', () => {
     await markSyncFailure(client, PAIR);
     const sql = client.query.mock.calls[0].arguments[0];
     const setClause = sql.slice(sql.indexOf('SET'), sql.indexOf('WHERE'));
-    assert.doesNotMatch(setClause, /price|source_id|last_updated/);
+    assert.doesNotMatch(setClause.replace('consecutive_failure_count', ''), /price|source_id|last_updated/);
     assert.doesNotMatch(sql, /INSERT|DELETE|ON CONFLICT/);
   });
 
   test('reports when there was nothing to mark (no row, or a manual row)', async () => {
-    assert.deepEqual(await markSyncFailure(recordingClient(0), PAIR), { updated: false });
+    assert.deepEqual(await markSyncFailure(recordingClient(0), PAIR), { updated: false, consecutiveFailures: null });
   });
 
   test('rejects a malformed pair before querying', async () => {
@@ -52,13 +53,13 @@ describe('markSyncFailure', () => {
 });
 
 describe('markSyncSuccess', () => {
-  test('clears the stale flag of that pair only (AC3)', async () => {
+  test('clears the stale flag and resets the failure count of that pair only (005 AC3; 006 AC4)', async () => {
     const client = recordingClient(1);
 
     assert.deepEqual(await markSyncSuccess(client, PAIR), { updated: true });
 
     const [sql, params] = client.query.mock.calls[0].arguments;
-    assert.match(sql, /UPDATE pricing\s+SET is_stale = FALSE\s+WHERE device_id = \$1\s+AND distributor_id = \$2/);
+    assert.match(sql, /UPDATE pricing\s+SET is_stale = FALSE,\s+consecutive_failure_count = 0\s+WHERE device_id = \$1\s+AND distributor_id = \$2/);
     assert.doesNotMatch(sql, /INSERT|DELETE/);
     assert.deepEqual(params, [11, 7]);
   });

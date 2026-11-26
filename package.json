@@ -12,6 +12,8 @@
     "seed:unifi-devices": "tsx scripts/seed-unifi-devices.ts",
     "insert:unifi-productlines": "tsx scripts/insert-unifi-productlines.ts",
     "pricing:smoke": "node --env-file=.env scripts/firecrawl-smoke.js",
+    "pricing:review": "node --env-file=.env scripts/pricing-review.js",
+    "pricing:set-manual": "node --env-file=.env scripts/pricing-set-manual.js",
     "seed:reyee-productlines": "tsx scripts/insert-reyee-productlines.ts",
     "seed:reyee-devices": "tsx scripts/seed-reyee-devices.ts",
     "insert:grandstream-productlines": "tsx scripts/insert-grandstream-productlines.ts",
