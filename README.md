@@ -155,7 +155,7 @@ Prints the result and the number of products extracted; exits 0 on success. Each
 
 ### Credits and limits (weekly job)
 
-**Project limits (confirmed):** 1,000 Firecrawl credits per refresh, and 2 concurrent requests.
+**Project limits (confirmed):** 1,000 Firecrawl credits per month (the allowance refreshes monthly), and 2 concurrent requests.
 
 **Cost per page:** a JSON-format scrape costs 5 credits (1 base + 4 for JSON) at the time of writing. Cached results are charged in full.
 
@@ -175,7 +175,7 @@ Prints the result and the number of products extracted; exits 0 on success. Each
 
 With two extra pages, a run is 115 credits, about 500 per month.
 
-**Against the limit:** if the 1,000-credit allowance refreshes monthly, the weekly job uses about half of it. Manual runs (`pricing:smoke`, QA batches, a manual workflow execution) spend from the same allowance. A full manual run costs the same as a weekly run.
+**Against the limit:** the weekly job uses about half of the 1,000 monthly credits (about 457, or 500 with the two extra pages). Manual runs (`pricing:smoke`, QA batches, a manual workflow execution) spend from the same allowance. A full manual run costs the same as a weekly run.
 
 **Duplicates:** `pricing_source` rows that were seeded more than once are scraped and charged once per copy. Check for duplicates before a run (`SELECT vendor_id, distributor_id, source_url, count(*) FROM pricing_source GROUP BY 1, 2, 3 HAVING count(*) > 1;`).
 
