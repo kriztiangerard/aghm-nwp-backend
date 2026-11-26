@@ -213,6 +213,21 @@ Put the fck-nat instance id in `cdk.json`, then deploy:
 
 You can also pass it for one deploy with `npx cdk deploy -c fckNatInstanceId=i-...`. The state machine may only start and stop that one instance.
 
+### Writing to a QA database instead of production
+
+By default, the Price updater writes to the engine's database (secret `aghm-nwp/database`). For QA runs, point **only the Price updater** at another database:
+
+1. **Create a secret holding the QA database's connection URL,** in the same plain-URL form as `aghm-nwp/database`. Put the URL in a file, create the secret, then delete the file:
+   ```bash
+   aws secretsmanager create-secret --name aghm-nwp/database-qa --secret-string file://qa-url.txt
+   rm qa-url.txt
+   ```
+2. **Set `"priceDatabaseSecretName": "aghm-nwp/database-qa"`** in `cdk.json` (or pass `-c priceDatabaseSecretName=aghm-nwp/database-qa`), then run `npx cdk diff` and `npx cdk deploy`. The synth prints a warning while the override is set.
+3. **Before any run,** invoke `{"action":"probe"}`. Its `databaseName` must be the QA database.
+4. **After QA,** clear the value (`""`) and redeploy, so the weekly runs write to production again. Probe should then show the production database's name.
+
+The engine always keeps its own secret; this setting never changes what the API reads.
+
 ### Run it now
 
 ```bash

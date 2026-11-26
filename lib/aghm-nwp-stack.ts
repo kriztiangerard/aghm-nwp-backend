@@ -192,6 +192,19 @@ export class AghmNwpStack extends cdk.Stack {
       'aghm-nwp/firecrawl',
     );
 
+    // Database the Price updater writes to. By default the engine's database (aghm-nwp/database). For QA,
+    // set cdk.json context "priceDatabaseSecretName" (or -c priceDatabaseSecretName=...) to another secret
+    // holding a plain connection URL like the engine's, e.g. aghm-nwp/database-qa for the QA database. Only the Price
+    // updater changes; the engine keeps its own secret. Clear it and redeploy to write to production again.
+    const priceDatabaseSecretName = String(this.node.tryGetContext('priceDatabaseSecretName') ?? '').trim();
+    const priceDatabaseSecret = priceDatabaseSecretName === ''
+      ? databaseSecret
+      : secretsmanager.Secret.fromSecretNameV2(this, 'PriceUpdaterDatabaseSecret', priceDatabaseSecretName);
+    if (priceDatabaseSecretName !== '') {
+      cdk.Annotations.of(this).addWarningV2('nwp:price-database-override',
+        `The Price updater writes to the database in secret "${priceDatabaseSecretName}", not the engine's database. Clear priceDatabaseSecretName in cdk.json and redeploy to write to production.`);
+    }
+
     // Explicit role (AC4: read the two secrets and write its own logs). Without one, CDK attaches
     // AWSLambdaBasicExecutionRole and AWSLambdaVPCAccessExecutionRole, which allow writing to every log
     // group in the account. Logs: only this function's log group (it already exists, so no CreateLogGroup).
@@ -227,6 +240,7 @@ export class AghmNwpStack extends cdk.Stack {
       memorySize: 512,                     // waits on Firecrawl over the network; little CPU or memory needed
       environment: {
         ...databaseEnvironment,
+        DATABASE_SECRET_ARN: priceDatabaseSecret.secretArn,   // the engine's, unless priceDatabaseSecretName is set
         FIRECRAWL_SECRET_ARN: firecrawlSecret.secretArn,
         // Pages scraped at once per batch; see FIRECRAWL_PAGES_PER_BATCH at the top of this file.
         FIRECRAWL_CONCURRENCY: String(FIRECRAWL_PAGES_PER_BATCH),
@@ -235,7 +249,7 @@ export class AghmNwpStack extends cdk.Stack {
       logGroup: priceUpdaterLogGroup,
       role: priceUpdaterRole,
     });
-    databaseSecret.grantRead(priceUpdaterRole);
+    priceDatabaseSecret.grantRead(priceUpdaterRole);   // only the secret it actually uses
     firecrawlSecret.grantRead(priceUpdaterRole);
 
 
