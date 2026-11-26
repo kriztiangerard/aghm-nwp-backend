@@ -331,7 +331,7 @@ describe('upsertSynchronizedPrice', () => {
     assert.match(sql, /ON CONFLICT \(device_id, distributor_id\) DO UPDATE/);
     assert.match(sql, /source_id\s+= EXCLUDED\.source_id/);   // replaces a manual row's NULL source_id
     assert.doesNotMatch(sql.split('VALUES')[0], /pricing_id/);   // the identity default assigns it
-    assert.deepEqual(params, [11, 7, 101, '3500.00', RETRIEVED]);
+    assert.deepEqual(params, [11, 7, 101, '3500.00', '2026-11-23T02:01:00.000Z']);   // UTC string, never a local-time Date
   });
 
   test('rejects records that did not come from normalizeListing', async () => {
