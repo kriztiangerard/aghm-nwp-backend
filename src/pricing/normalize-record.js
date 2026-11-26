@@ -11,6 +11,17 @@
 //           the vendor's SKU index (buildSkuIndex), and the retrieval time.
 //   output: records ready for upsertSynchronizedPrice() (NWP-PRICE-002) and rejections with a reason.
 //
+// SKU matching is layered, from strict to loose, so a store's spelling still finds the device without ever
+// guessing between two devices:
+//   1. exact, after normalizeSku (trim, uppercase, collapse spaces, full-width to ASCII);
+//   2. ignoring separators (spaces, hyphens, underscores, dots, slashes): U6-PRO = U6 Pro = u6pro;
+//   3. also ignoring a leading brand prefix (TL-, TP-Link, UBNT-, UniFi, RG-, Ruijie, Reyee, Cisco, HPE, Aruba),
+//      on both the page and the catalog side: TL-SG2008 finds SG2008, RAP2266 finds RG-RAP2266.
+// Steps 2 and 3 only match when exactly ONE catalog device has that key. TP-Link reuses base model numbers
+// (SG3428XPP-M2 and TL-SG3428XPP-M2 are different switches), so an ambiguous key never matches and needs
+// a closer spelling. Letters and digits are never dropped: SG2008 never matches SG2008P. Region and
+// version suffixes ((UN), -NA, V2) are not stripped; they can mean a different product.
+//
 // Reasons are NWP-PRICE-004 SYNC_STATUS values. `no_sku_match` means the product is not in this vendor's
 // catalog; on a listing page that is normal (stores list many models we do not track), so the caller skips
 // it rather than logging a failure. Nothing is written to the database here.
@@ -97,6 +108,57 @@ function normalizeSku(raw) {
  * @param {Array<{ deviceId: number, sku: string }>} devices
  * @returns {Map<string, number>}
  */
+const SKU_SEPARATORS = /[\s\-_./]+/g;
+// Applied to a normalized (uppercase) SKU, repeatedly, so "TP-LINK TL-SG2008" loses both.
+const BRAND_PREFIX = /^(?:TP[\s-]?LINK\s+|TL[\s-]|UBNT[\s-]|UBIQUITI\s+|UNIFI\s+|RUIJIE\s+|REYEE\s+|RG[\s-]|CISCO\s+|HPE\s+|ARUBA\s+(?:INSTANT\s+ON\s+)?)+/;
+const AMBIGUOUS = Symbol('ambiguous');
+
+function compactSku(normalized) {
+  return normalized.replace(SKU_SEPARATORS, '');
+}
+
+function unbrandedSku(normalized) {
+  return compactSku(normalized.replace(BRAND_PREFIX, ''));
+}
+
+// Looser keys of an index, built once per index. A key shared by two devices maps to AMBIGUOUS.
+const looseKeysCache = new WeakMap();
+function looseKeys(skuIndex) {
+  let keys = looseKeysCache.get(skuIndex);
+  if (keys) return keys;
+  const add = (map, key, deviceId) => {
+    if (!key) return;
+    map.set(key, map.has(key) && map.get(key) !== deviceId ? AMBIGUOUS : deviceId);
+  };
+  keys = { compact: new Map(), unbranded: new Map() };
+  for (const [normalized, deviceId] of skuIndex) {
+    add(keys.compact, compactSku(normalized), deviceId);
+    add(keys.unbranded, unbrandedSku(normalized), deviceId);
+  }
+  looseKeysCache.set(skuIndex, keys);
+  return keys;
+}
+
+/**
+ * Finds the catalog device for a SKU as a store wrote it, using the layered match above.
+ * @param {Map<string, number>} skuIndex  from buildSkuIndex()
+ * @param {*} rawSku
+ * @returns {number|undefined} the device id, or undefined when nothing (or more than one device) matches
+ */
+function matchSku(skuIndex, rawSku) {
+  const normalized = normalizeSku(rawSku);
+  if (normalized === null) return undefined;
+  const exact = skuIndex.get(normalized);
+  if (exact !== undefined) return exact;
+  const keys = looseKeys(skuIndex);
+  for (const [map, key] of [[keys.compact, compactSku(normalized)], [keys.unbranded, unbrandedSku(normalized)]]) {
+    const deviceId = map.get(key);
+    if (deviceId === AMBIGUOUS) return undefined;   // two catalog devices fit: never guess
+    if (deviceId !== undefined) return deviceId;
+  }
+  return undefined;
+}
+
 function buildSkuIndex(devices) {
   if (!Array.isArray(devices)) throw new TypeError('buildSkuIndex: devices must be an array.');
   const index = new Map();
@@ -143,7 +205,7 @@ function normalizeOne(raw, source, skuIndex, retrievedDate) {
     return reject(NORMALIZE_REJECT_REASONS.MISSING_FIELD, 'No SKU was extracted for this product.', { pageSku: null });
   }
 
-  const deviceId = skuIndex.get(normalizeSku(extracted.sku));
+  const deviceId = matchSku(skuIndex, extracted.sku);
   if (deviceId === undefined) {
     return reject(
       NORMALIZE_REJECT_REASONS.NO_SKU_MATCH,
@@ -259,6 +321,7 @@ module.exports = {
   normalizeRecord,
   normalizeListing,
   normalizeSku,
+  matchSku,
   buildSkuIndex,
   NORMALIZE_REJECT_REASONS,
 };
