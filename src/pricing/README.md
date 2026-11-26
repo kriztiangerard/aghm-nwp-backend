@@ -11,6 +11,7 @@ Tests are in `tests/pricing/` and run with `node --test tests/pricing/*.test.js`
 | `handler.js` | 010 | Lambda entry point. Dispatches on `event.action`: `probe`, `plan`, `process`, `markBatchFailed`, `finalize`. Actions not built yet throw `NotImplementedError` naming their story. |
 | `collect.js` | 002, 004 | `processSourceBatch()`: the `process` action's collection step. Scrapes one batch (with retry and failure isolation), combines its pages, stores found prices, returns a summary. |
 | `outcome.js` | 004 | `recordBatchOutcome()` (one `update_log` row per device), `attributeOutcomes()`, `loadTrackedRows()`, `getRunResult()`. |
+| `pricing-state.js` | 005 | `markSyncFailure()` (marks a synchronized row stale; never inserts, deletes or changes the price) and `markSyncSuccess()` (clears it). |
 | `sync-status.js` | 004 | `SYNC_STATUS`: the one list of outcomes for pages, devices and `update_log.status`; `RETRYABLE`, `ACCOUNT_LEVEL`. |
 | `extraction.js` | 002 | `LISTING_SCHEMA`, the Firecrawl JSON schema for a listing page (`{ products: [{ sku, name, price }] }`), and `readProducts()`. |
 | `sources.js` | 002 | `listActiveSources()` and `loadVendorSkuIndex()`. |
@@ -101,7 +102,7 @@ A **batch** is every active source of one vendor and one distributor, so all of 
 2. **Scrape:** each page is scraped with `LISTING_SCHEMA`, at most `FIRECRAWL_CONCURRENCY` at once. A failed page reports its error type and the others continue (see Failure handling). No products array is `invalid_response`; an empty list is `empty_content`.
 3. **Normalize:** each page goes through `normalizeListing()` (below). Products not in the catalog are counted, not failed.
 4. **Combine pages:** a device found on two pages at the same price is stored once (from the first page); at different prices it is stored from neither and reported as `invalid_price`. A usable price on one page wins over a rejection on another.
-5. **Store:** each found device in its own transaction: `upsertSynchronizedPrice()` then `markSyncSuccess()` (NWP-PRICE-005; a no-op until that story lands). A synchronized price replaces a manual one and sets `source_id`. A database error rolls back only that device (`db_error`).
+5. **Store:** each found device in its own transaction: `upsertSynchronizedPrice()` then `markSyncSuccess()`, which clears the row's stale flag (NWP-PRICE-005). A synchronized price replaces a manual one and sets `source_id`. A database error rolls back only that device (`db_error`).
 6. **Record:** `recordBatchOutcome()` writes one `update_log` row per device (next section).
 
 ### Summary returned
@@ -146,11 +147,20 @@ If a store's products come back without SKUs or with the store's own item codes,
 | Not found; its page succeeded | `not_listed` |
 | Never priced from this distributor and not found | nothing |
 
-After an account-level stop, unfound devices are not recorded. Every non-success also gets `markSyncFailure()` (NWP-PRICE-005, which marks the row stale; a no-op until that story lands). `run_at` is the run's shared `runAt`.
+After an account-level stop, unfound devices are not recorded. Every non-success also gets `markSyncFailure()` (see Stale prices). `run_at` is the run's shared `runAt`.
 
 `getRunResult(client, runAt)` reports the run as successful when at least one of its rows is `success`; finalize (NWP-PRICE-011) logs it.
 
 All statuses are in `sync-status.js`. Firecrawl error types and normalizer reasons map onto them by the same string.
+
+## Stale prices (NWP-PRICE-005)
+
+Staleness is stored per `pricing` row, so per device and distributor.
+
+- **Sync fails** (`markSyncFailure()`): the synchronized row is marked `is_stale = TRUE`; its price, `source_id` and `last_updated` stay exactly as they were, so the last verified price is still used. A manual row (`source_id` NULL) is never changed, and a missing row is never created.
+- **Sync succeeds** (`markSyncSuccess()`): the new price is stored and `is_stale` is cleared, in the same transaction.
+- **Engine:** a device counts as stale only when **every** pricing row is stale (`price-provenance.js`, NWP-ENGINE-006). Its BOM lines then carry `isStale`, and the plan gets the `BOM_PRICE_STALE` advisory with each SKU's last verified date. A device with any fresh or manual row is never shown as stale.
+- Nothing in `src/pricing/` deletes `pricing` rows.
 
 ## Price normalization (NWP-PRICE-003)
 
