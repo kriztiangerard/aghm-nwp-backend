@@ -68,29 +68,54 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- Constraints
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'pricing_device_distributor_key' AND contype = 'u' AND conrelid = 'public.pricing'::regclass
-    ) THEN
-        RAISE EXCEPTION 'Missing UNIQUE (device_id, distributor_id) on pricing';
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'pricing_consecutive_failure_count_check' AND contype = 'c' AND conrelid = 'public.pricing'::regclass
-    ) THEN
-        RAISE EXCEPTION 'Missing CHECK (consecutive_failure_count >= 0) on pricing';
-    END IF;
-
-    -- Indexes
+    -- Every table whose sequence 004 manages must have one (QA-004: a missing sequence is an error, not a skip)
     FOR expected IN
         SELECT * FROM (VALUES
-            ('pricing_source_id_idx'), ('update_log_run_at_idx'), ('update_log_device_distributor_run_at_idx')
-        ) AS t(index_name)
+            ('pricing', 'pricing_id'), ('update_log', 'upd_log_id'), ('vendor', 'vendor_id'),
+            ('distributor', 'distributor_id'), ('pricing_source', 'source_id'), ('device', 'device_id')
+        ) AS t(table_name, column_name)
     LOOP
-        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = expected.index_name) THEN
-            RAISE EXCEPTION 'Missing index %', expected.index_name;
+        IF pg_get_serial_sequence('public.' || expected.table_name, expected.column_name) IS NULL THEN
+            RAISE EXCEPTION '%.% has no identity sequence', expected.table_name, expected.column_name;
+        END IF;
+    END LOOP;
+
+    -- Constraints: present, and with the expected definition
+    FOR expected IN
+        SELECT * FROM (VALUES
+            ('pricing_device_distributor_key', 'u', 'UNIQUE (device_id, distributor_id)'),
+            ('pricing_consecutive_failure_count_check', 'c', 'CHECK ((consecutive_failure_count >= 0))')
+        ) AS t(conname, contype, definition)
+    LOOP
+        SELECT c.contype::text AS contype, pg_get_constraintdef(c.oid) AS definition INTO actual
+        FROM pg_constraint AS c
+        WHERE c.conname = expected.conname AND c.conrelid = 'public.pricing'::regclass;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Missing constraint % on pricing (expected %)', expected.conname, expected.definition;
+        END IF;
+        IF actual.contype <> expected.contype OR actual.definition <> expected.definition THEN
+            RAISE EXCEPTION 'Constraint % is "%", expected "%"', expected.conname, actual.definition, expected.definition;
+        END IF;
+    END LOOP;
+
+    -- Indexes: present, on the expected table and columns, in the expected order
+    FOR expected IN
+        SELECT * FROM (VALUES
+            ('pricing_source_id_idx',                    'pricing',    'USING btree (source_id)'),
+            ('update_log_run_at_idx',                    'update_log', 'USING btree (run_at)'),
+            ('update_log_device_distributor_run_at_idx', 'update_log', 'USING btree (device_id, distributor_id, run_at DESC)')
+        ) AS t(index_name, table_name, definition)
+    LOOP
+        SELECT i.tablename, i.indexdef INTO actual
+        FROM pg_indexes AS i
+        WHERE i.schemaname = 'public' AND i.indexname = expected.index_name;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Missing index % on % (expected %)', expected.index_name, expected.table_name, expected.definition;
+        END IF;
+        IF actual.tablename <> expected.table_name OR position(expected.definition IN actual.indexdef) = 0 THEN
+            RAISE EXCEPTION 'Index % is "%", expected % %', expected.index_name, actual.indexdef, expected.table_name, expected.definition;
         END IF;
     END LOOP;
 

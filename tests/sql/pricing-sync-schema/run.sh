@@ -7,7 +7,8 @@
 #
 # DESTRUCTIVE for the target database: every scenario drops and re-creates its public schema (the
 # existing migrations use the public schema by name). The script refuses to run unless the database
-# name contains "test". Never point it at RDS. Needs psql on PATH.
+# name contains "test" AND the connection is local (Unix socket or loopback address), so it can never
+# run against RDS or any other server. Needs psql on PATH.
 set -u
 
 if [ -z "${TEST_DATABASE_URL:-}" ]; then
@@ -30,8 +31,16 @@ case "$dbname" in
   *test*) ;;
   *) echo "Refusing to run: database '$dbname' does not contain 'test'." >&2; exit 2 ;;
 esac
+# Local only (QA-005): inet_server_addr() is NULL over a Unix socket, 127.x.x.x or ::1 over loopback.
+server=$($PSQL -tA -c "select coalesce(host(inet_server_addr()), 'unix-socket')") || exit 2
+case "$server" in
+  unix-socket|127.*|::1) ;;
+  *) echo "Refusing to run: server address $server is not local. Use a throwaway database on this machine." >&2; exit 2 ;;
+esac
 
 pass=0; fail=0
+seqs="SELECT string_agg(c.relname || '=' || coalesce(pg_sequence_last_value(c.oid)::text, 'unused'), ',' ORDER BY c.relname)
+  FROM pg_class c WHERE c.relkind = 'S' AND c.relnamespace = 'public'::regnamespace"
 ok()  { echo "  PASS  $1"; pass=$((pass+1)); }
 bad() { echo "  FAIL  $1"; fail=$((fail+1)); }
 q()   { $PSQL -tA -c "$1" 2>&1; }
@@ -83,8 +92,22 @@ expect_fail "duplicate device/distributor pricing row rejected" \
 expect_fail "negative failure count rejected" \
   "UPDATE pricing SET consecutive_failure_count = -1 WHERE pricing_id = 1" "pricing_consecutive_failure_count_check"
 
-echo "Scenario C: rerun is harmless"
+echo "Scenario C: rerun is harmless and changes nothing (AC6, QA-002)"
+# move two sequences AHEAD of their data: used ids that were then deleted
+q "INSERT INTO vendor (name, need_controller) SELECT 'Tmp ' || g, false FROM generate_series(1, 5) g" >/dev/null
+q "DELETE FROM vendor WHERE name LIKE 'Tmp %'" >/dev/null
+q "INSERT INTO update_log (distributor_id, device_id, status) SELECT (SELECT min(distributor_id) FROM distributor), (SELECT min(device_id) FROM device), 'success' FROM generate_series(1, 3)" >/dev/null
+q "DELETE FROM update_log" >/dev/null   # empty table, sequence ahead
+before=$(q "$seqs"); vnext_before=$(q "SELECT nextval(pg_get_serial_sequence('vendor','vendor_id'))")
+q "SELECT setval(pg_get_serial_sequence('vendor','vendor_id'), $vnext_before - 1)" >/dev/null   # undo the peek
+before=$(q "$seqs")
 out=$(run "$M004") && ok "004 runs a second time" || bad "rerun: $out"
+after=$(q "$seqs")
+[ "$before" = "$after" ] && ok "rerun leaves every sequence exactly where it was" || bad "sequences changed: $before -> $after"
+id=$(q "INSERT INTO vendor (name, need_controller) VALUES ('After Rerun', false) RETURNING vendor_id")
+[ "$id" = "$vnext_before" ] && ok "next vendor id continues the sequence ($id), no earlier id reused" || bad "vendor id after rerun: $id, expected $vnext_before"
+id=$(q "INSERT INTO update_log (distributor_id, device_id, status) SELECT min(distributor_id), (SELECT min(device_id) FROM device), 'success' FROM distributor RETURNING upd_log_id")
+[ "$id" -gt 3 ] && ok "empty update_log keeps its sequence (next id $id, not restarted at 1)" || bad "update_log id after rerun: $id"
 check_passes && ok "post-check still passes" || bad "post-check after rerun"
 
 echo "Scenario D: parallel writers no longer collide"
@@ -95,6 +118,29 @@ done
 wait
 errors=$(cat /tmp/nwp-par-*.log | grep -c ERROR); rm -f /tmp/nwp-par-*.log
 [ "$errors" = "0" ] && [ "$(q 'SELECT count(*) FROM update_log')" = "1000" ] && ok "4 concurrent writers inserted 1000 log rows with no id collisions" || bad "concurrent inserts: $errors errors"
+
+echo "Scenario D (continued): parallel pricing writers"
+q "DELETE FROM pricing WHERE distributor_id IN (SELECT distributor_id FROM distributor WHERE name LIKE 'Par %')" >/dev/null
+q "INSERT INTO distributor (name) SELECT 'Par ' || g FROM generate_series(1, 4) g" >/dev/null
+for w in 1 2 3 4; do
+  $PSQL -c "INSERT INTO pricing (device_id, distributor_id, price) SELECT d.device_id, (SELECT distributor_id FROM distributor WHERE name = 'Par $w'), 100 FROM device d" >/tmp/nwp-ppar-$w.log 2>&1 &
+done
+wait
+errors=$(cat /tmp/nwp-ppar-*.log | grep -c ERROR); rm -f /tmp/nwp-ppar-*.log
+expected=$(q "SELECT 4 * count(*) FROM device"); got=$(q "SELECT count(*) FROM pricing p JOIN distributor d USING (distributor_id) WHERE d.name LIKE 'Par %'")
+dups=$(q "SELECT count(*) FROM (SELECT pricing_id FROM pricing GROUP BY pricing_id HAVING count(*) > 1) x")
+[ "$errors" = "0" ] && [ "$got" = "$expected" ] && [ "$dups" = "0" ] && ok "4 concurrent writers inserted $got pricing rows with unique ids" || bad "concurrent pricing inserts: $errors errors, $got of $expected rows"
+$PSQL -c "INSERT INTO pricing (device_id, distributor_id, price) SELECT d.device_id, (SELECT distributor_id FROM distributor WHERE name = 'Par 1'), 1 FROM device d ORDER BY d.device_id LIMIT 1" >/tmp/nwp-ppar-dup.log 2>&1
+grep -q "pricing_device_distributor_key" /tmp/nwp-ppar-dup.log && ok "a concurrent duplicate pair is still rejected by the UNIQUE constraint" || bad "duplicate pair: $(cat /tmp/nwp-ppar-dup.log)"; rm -f /tmp/nwp-ppar-dup.log
+
+echo "Scenario G: a failure before the resync leaves sequences untouched (QA-006)"
+reset_db; apply_base; run "$M2026" >/dev/null
+q "INSERT INTO vendor (vendor_id, name, need_controller) VALUES ((SELECT max(vendor_id) + 5 FROM vendor), 'Explicit Vendor', false)" >/dev/null
+q "UPDATE pricing SET consecutive_failure_count = -1 WHERE pricing_id = (SELECT min(pricing_id) FROM pricing)" >/dev/null   # makes the CHECK in step 3 fail
+before=$(q "$seqs")
+out=$(run "$M004") && bad "004 should fail on a negative count" || ok "004 stops on the CHECK violation"
+after=$(q "$seqs")
+[ "$before" = "$after" ] && ok "no sequence moved by the failed run" || bad "sequences moved: $before -> $after"
 
 echo "Scenario E: duplicate pricing rows stop the migration, nothing changed"
 reset_db; apply_base; run "$M2026" >/dev/null
