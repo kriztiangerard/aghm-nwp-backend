@@ -127,10 +127,11 @@ describe('markBatchFailed (AC5)', () => {
 });
 
 describe('finalize (AC6, AC7)', () => {
-  function fakeClient({ devices = [11, 12], pricing = [], updateLog = [], flagged = 0 } = {}) {
+  function fakeClient({ devices = [11, 12], pricing = [], updateLog = [], flagged = 0, unrecorded = [] } = {}) {
     const statements = [];
     const query = mock.fn(async (sql, params) => {
       statements.push(sql);
+      if (/JOIN pricing_source AS s/.test(sql)) return { rows: unrecorded };
       if (/SELECT DISTINCT device_id FROM update_log/.test(sql)) return { rows: devices.map((device_id) => ({ device_id })) };
       if (/FROM pricing\s+WHERE device_id = ANY/.test(sql)) return { rows: pricing };
       if (/UPDATE device SET price/.test(sql)) return { rowCount: 1 };
@@ -156,6 +157,7 @@ describe('finalize (AC6, AC7)', () => {
       source: 'price-updater', event: 'run-summary', runAt: RUN_AT, successful: true, rows: 3,
       byStatus: { success: 2, blocked: 1 }, devicesNeedingReview: 1,
       devices: 2, mediansUpdated: 1, mediansUnchanged: 1, flaggedInRun: 0, stoppedBy: null,
+      unrecordedDevices: 0, unrecorded: [],
     });
     assert.deepEqual(JSON.parse(logger.log.mock.calls[0].arguments[0]), line);
     const order = ['update_log WHERE run_at = \\$1 ORDER', 'UPDATE device', 'WITH decision', 'GROUP BY status']
@@ -185,6 +187,41 @@ describe('finalize (AC6, AC7)', () => {
 
     assert.deepEqual(line.stoppedBy, { status: 'quota_exceeded', sourceId: 3, message: 'credits used up' });
     assert.equal(line.successful, false);
+  });
+
+  test('AC5: devices with no outcome recorded are listed by batch, and an outcomes-missing error line is logged', async () => {
+    const { client, statements } = fakeClient({
+      updateLog: [{ status: 'success', count: 5 }],
+      unrecorded: [{ vendor_id: 3, distributor_id: 7, devices: 2, device_ids: [21, 22] }],
+    });
+    const logger = { log: mock.fn(), error: mock.fn() };
+
+    const line = await finalizeRun(client, { runAt: RUN_AT, stop: null }, { logger });
+
+    assert.equal(line.unrecordedDevices, 2);
+    assert.deepEqual(line.unrecorded, [{ vendorId: 3, distributorId: 7, devices: 2, deviceIds: [21, 22] }]);
+    assert.equal(logger.error.mock.callCount(), 1);
+    const alert = JSON.parse(logger.error.mock.calls[0].arguments[0]);
+    assert.equal(alert.event, 'outcomes-missing');
+    assert.equal(alert.unrecordedDevices, 2);
+    assert.match(alert.recovery, /markBatchFailed/);
+
+    const sql = statements.find((text) => /JOIN pricing_source AS s/.test(text));
+    assert.match(sql, /s\.is_active/);                              // only devices that belong to this run's batches
+    assert.match(sql, /NOT EXISTS \(SELECT 1 FROM update_log AS u/);
+    assert.match(sql, /u\.run_at = \$1::timestamp/);
+    assert.match(sql, /GROUP BY s\.vendor_id, p\.distributor_id/);  // one group per batch
+  });
+
+  test('AC5: after an account-level stop the skipped batches are listed but no error is logged', async () => {
+    const { client } = fakeClient({ unrecorded: [{ vendor_id: 3, distributor_id: 7, devices: 4, device_ids: [21, 22, 23, 24] }] });
+    const stop = { Error: 'PriceSync.AccountLevelStop', Cause: JSON.stringify({ status: 'quota_exceeded', sourceId: 3 }) };
+    const logger = { log: mock.fn(), error: mock.fn() };
+
+    const line = await finalizeRun(client, { runAt: RUN_AT, stop }, { logger });
+
+    assert.equal(line.unrecordedDevices, 4);
+    assert.equal(logger.error.mock.callCount(), 0);
   });
 
   test('readStop keeps a cause that is not JSON', () => {

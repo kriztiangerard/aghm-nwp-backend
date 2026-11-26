@@ -180,6 +180,8 @@ async function finalizeRun(client, input, { includeStale = false, logger = conso
   const medians = await refreshDeviceMedians(client, deviceIds, { includeStale, updatedAt: runAt });   // stored as UTC (median.js)
   const review = await evaluateManualReview(client, deviceIds);
   const summary = await buildRunSummary(client, runAt);
+  const unrecorded = await findUnrecordedOutcomes(client, runAt);
+  const unrecordedDevices = unrecorded.reduce((sum, group) => sum + group.devices, 0);
 
   const line = {
     ...summary,
@@ -188,9 +190,51 @@ async function finalizeRun(client, input, { includeStale = false, logger = conso
     mediansUnchanged: medians.unchanged.length,
     flaggedInRun: review.flagged.length,
     stoppedBy,
+    // AC5: devices that should have an update_log row in this run and don't. After an account-level stop
+    // these are the skipped batches (expected); otherwise a batch's failure was not recorded (for example
+    // markBatchFailed itself failed) and the workflow ends Failed (PriceSync.OutcomesMissing).
+    unrecordedDevices,
+    unrecorded,
   };
   logger.log(JSON.stringify(line));
+  if (unrecordedDevices > 0 && !stoppedBy) {
+    logger.error(JSON.stringify({
+      source: 'price-updater', event: 'outcomes-missing', runAt, unrecordedDevices, unrecorded,
+      recovery: 'Run markBatchFailed for each listed vendor and distributor with this runAt, then finalize again (README: Price Updater: Weekly Sync, Recovery).',
+    }));
+  }
   return line;
+}
+
+const UNRECORDED_IDS_SHOWN = 20;   // per group in the log line; the count is always exact
+
+/**
+ * Devices last priced from an ACTIVE source (so they belong to one of this run's batches) with no update_log
+ * row for this run and that distributor. Grouped by vendor and distributor, which is how batches are built,
+ * so each group says exactly which batch to recover. Manual rows and inactive sources are left out.
+ *
+ * @returns {Promise<Array<{ vendorId: number, distributorId: number, devices: number, deviceIds: number[] }>>}
+ */
+async function findUnrecordedOutcomes(client, runAt) {
+  const { rows } = await client.query(
+    `SELECT s.vendor_id, p.distributor_id, count(*)::int AS devices,
+            (array_agg(p.device_id ORDER BY p.device_id))[1:${UNRECORDED_IDS_SHOWN}] AS device_ids
+       FROM pricing AS p
+       JOIN pricing_source AS s ON s.source_id = p.source_id AND s.is_active
+      WHERE NOT EXISTS (SELECT 1 FROM update_log AS u
+                         WHERE u.run_at = $1::timestamp
+                           AND u.device_id = p.device_id
+                           AND u.distributor_id = p.distributor_id)
+      GROUP BY s.vendor_id, p.distributor_id
+      ORDER BY s.vendor_id, p.distributor_id`,
+    [runAt],
+  );
+  return rows.map((row) => ({
+    vendorId: Number(row.vendor_id),
+    distributorId: Number(row.distributor_id),
+    devices: Number(row.devices),
+    deviceIds: (row.device_ids || []).map(Number),
+  }));
 }
 
 module.exports = {
@@ -200,5 +244,6 @@ module.exports = {
   markBatchFailed,
   readStop,
   finalizeRun,
+  findUnrecordedOutcomes,
   InvalidWorkflowInputError,
 };

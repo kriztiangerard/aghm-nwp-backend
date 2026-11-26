@@ -15,6 +15,7 @@ import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 //                                                                ▼
 //   Probe (retried while fck-nat comes up) → Plan → Map(ProcessBatch, Catch → MarkBatchFailed)
 //     → Finalize → stop fck-nat if this execution started it → Succeed, or Fail when no price was collected
+//       or when some devices' outcomes were not recorded (AC5)
 //
 // The Map stops early when a batch reports an account-level error (auth_error, quota_exceeded,
 // network_error): that iteration ends in the PriceSync.AccountLevelStop Fail state, which stops the Map;
@@ -195,8 +196,22 @@ export class PriceSyncWorkflow extends Construct {
       error: 'PriceSync.NoPriceCollected',
       cause: 'No device price was collected in this run (no update_log row is success). See the run-summary log line.',
     });
+    // AC5: devices that should have a failure or success recorded in this run but don't (for example
+    // markBatchFailed itself failed). Expected after an account-level stop (skipped batches), so only then
+    // ignored. The run-summary line lists them by vendor and distributor; the README says how to recover.
+    const outcomesMissing = new sfn.Fail(this, 'OutcomesMissing', {
+      error: 'PriceSync.OutcomesMissing',
+      causePath: sfn.JsonPath.format(
+        '{} device(s) have no update_log row for this run. See the run-summary log line (unrecorded) and recover with markBatchFailed, then finalize.',
+        sfn.JsonPath.stringAt('$.summary.unrecordedDevices'),   // States.Format accepts the number as is
+      ),
+    });
     const checkResult = new sfn.Choice(this, 'AnyPriceCollected?')
       .when(sfn.Condition.booleanEquals('$.summary.successful', false), noPrices)
+      .when(sfn.Condition.and(
+        sfn.Condition.numberGreaterThan('$.summary.unrecordedDevices', 0),
+        sfn.Condition.isNull('$.summary.stoppedBy'),
+      ), outcomesMissing)
       .otherwise(succeeded);
     const stopNatAfterRun = this.stopNat('StopNat', props.natInstanceId, natArn)
       .addCatch(natNotStopped, { resultPath: '$.stopError' });
