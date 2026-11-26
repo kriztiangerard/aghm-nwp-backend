@@ -34,6 +34,15 @@ export class AghmNwpStack extends cdk.Stack {
       vpcId: 'vpc-06f55cc32200b2717',
     });
 
+    const lambdaSubnets = [
+      ec2.Subnet.fromSubnetAttributes(this, 'LambdaSubnetA', {
+        subnetId: 'subnet-0a5873e4b08810625', availabilityZone: 'ap-southeast-1a', routeTableId: 'rtb-0034daa508cc8947b',
+      }),
+      ec2.Subnet.fromSubnetAttributes(this, 'LambdaSubnetB', {
+        subnetId: 'subnet-0314e01bfb11c0bc7', availabilityZone: 'ap-southeast-1b', routeTableId: 'rtb-0034daa508cc8947b',
+      }),
+    ];
+
     const lambdaSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(
       this, 'BackendSg', 'sg-08314c5a76cbd8cb0',
     );
@@ -69,7 +78,10 @@ export class AghmNwpStack extends cdk.Stack {
       const vpcProps: lambdaNodejs.NodejsFunctionProps = {
         ...baseProps,
         vpc,
-        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+        // Listed explicitly, not selected by type: these subnets' route table now sends 0.0.0.0/0 to the
+        // fck-nat instance, so a refreshed VPC lookup (cdk context --reset) could stop classifying them as
+        // Isolated and leave a type-based selection empty. Same two subnets the cached lookup lists as Isolated.
+        vpcSubnets: { subnets: lambdaSubnets },
         securityGroups: [lambdaSecurityGroup],
         bundling: { loader: { '.pem': 'text' } },
       };
@@ -162,6 +174,67 @@ export class AghmNwpStack extends cdk.Stack {
       engineMachine.grantStartSyncExecution(entryFn);
 
 
+    // 1c. BACKEND: Price updater (NWP-PRICE-010)
+    // Same subnets and security group as the engine Lambdas (vpcProps). Those subnets' route table sends
+    // 0.0.0.0/0 to the fck-nat instance, so the function reaches Firecrawl whenever fck-nat is running; it
+    // needs no NAT setting of its own. The weekly workflow that invokes it is NWP-PRICE-011.
+
+    // Created once by hand so the key never appears in code or templates:
+    //   aws secretsmanager create-secret --name aghm-nwp/firecrawl --secret-string file://firecrawl-key.txt
+    const firecrawlSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      'FirecrawlApiKeySecret',
+      'aghm-nwp/firecrawl',
+    );
+
+    // Explicit role (AC4: read the two secrets and write its own logs). Without one, CDK attaches
+    // AWSLambdaBasicExecutionRole and AWSLambdaVPCAccessExecutionRole, which allow writing to every log
+    // group in the account. Logs: only this function's log group (it already exists, so no CreateLogGroup).
+    // Network interfaces: required for any Lambda in a VPC and only grantable on "*" (AWS does not support
+    // narrowing them); they let Lambda attach the function to its subnets, nothing more.
+    const priceUpdaterLogGroup = makeLogGroup('PriceUpdaterLogs');
+    const priceUpdaterRole = new iam.Role(this, 'PriceUpdaterRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      description: 'Price updater (NWP-PRICE-010): own logs, VPC network interfaces, Firecrawl and database secrets',
+    });
+    priceUpdaterRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'OwnLogGroupOnly',
+      actions: ['logs:CreateLogStream', 'logs:PutLogEvents'],
+      resources: [priceUpdaterLogGroup.logGroupArn],   // arn:...:log-group:<name>:* (its streams)
+    }));
+    priceUpdaterRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'VpcNetworkInterfaces',
+      actions: [
+        'ec2:CreateNetworkInterface',
+        'ec2:DescribeNetworkInterfaces',
+        'ec2:DescribeSubnets',
+        'ec2:DeleteNetworkInterface',
+        'ec2:AssignPrivateIpAddresses',
+        'ec2:UnassignPrivateIpAddresses',
+      ],
+      resources: ['*'],
+    }));
+
+    const priceUpdaterFn = new lambdaNodejs.NodejsFunction(this, 'PriceUpdaterFunction', {
+      ...vpcProps,
+      entry: path.join(repositoryRoot, 'src', 'pricing', 'handler.js'),
+      timeout: cdk.Duration.minutes(15),   // one vendor x distributor batch per call; Lambda's maximum. Revisit after a real run.
+      memorySize: 512,                     // waits on Firecrawl over the network; little CPU or memory needed
+      environment: {
+        ...databaseEnvironment,
+        FIRECRAWL_SECRET_ARN: firecrawlSecret.secretArn,
+        // Pages scraped at once. Must not exceed the Firecrawl plan's concurrent browsers (Free 2, Hobby 5);
+        // extra requests only queue. 2 fits the Free plan; raise it only after upgrading.
+        FIRECRAWL_CONCURRENCY: '2',
+        PRICE_MEDIAN_INCLUDE_STALE: 'false',
+      },
+      logGroup: priceUpdaterLogGroup,
+      role: priceUpdaterRole,
+    });
+    databaseSecret.grantRead(priceUpdaterRole);
+    firecrawlSecret.grantRead(priceUpdaterRole);
+
+
     // 1a. BACKEND: API Gateway routes requests to the active engine handler.
 
     const httpApi = new apigwv2.HttpApi(this, 'NwpHttpApi', {
@@ -185,12 +258,10 @@ export class AghmNwpStack extends cdk.Stack {
     });
 
 
-    // 1b. BACKEND: EventBridge schedule (triggers pricingUpdateLambda)
+    // 1b. BACKEND: EventBridge schedule (triggers the price sync)
 
-    // Depends on pricingUpdateLambda above — stays disabled until that's active.
-    // TODO: cadence still unresolved — FR doc says "weekly", team discussion
-    // said "daily 2am". Confirm actual cadence before uncommenting; the
-    // schedule expression below is a placeholder (daily 2am UTC) only.
+    // Placeholder only. NWP-PRICE-011 replaces it with a weekly EventBridge Scheduler schedule (the manuscript
+    // says weekly) that starts the sync workflow, which in turn invokes priceUpdaterFn (section 1c).
 
     // const pricingUpdateRule = new events.Rule(this, 'PricingUpdateSchedule', {
     //   schedule: events.Schedule.cron({ minute: '0', hour: '2' }),
@@ -215,9 +286,7 @@ export class AghmNwpStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'EntryFunctionName', { value: entryFn.functionName });
     new cdk.CfnOutput(this, 'StateMachineArn', { value: engineMachine.stateMachineArn });
 
-    /* new cdk.CfnOutput(this, 'PricingUpdateFunctionName', {
-      value: pricingUpdateLambda.functionName,
-    }); */
+    new cdk.CfnOutput(this, 'PriceUpdaterFunctionName', { value: priceUpdaterFn.functionName });
 
     // Re-enable alongside the API Gateway above once it's active.
     new cdk.CfnOutput(this, 'ApiUrl', {
