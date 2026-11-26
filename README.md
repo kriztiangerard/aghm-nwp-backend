@@ -155,7 +155,35 @@ Prints the result and the number of products extracted; exits 0 on success. Each
 
 ### Credits and limits (weekly job)
 
-A JSON-format scrape costs 5 credits per page (1 base + 4 for JSON) at the time of writing; cached results are charged in full. Monthly estimate: `listing pages (including extra pagination pages) × 5 × 4.35 weekly runs`. Fill in the plan's monthly credits and concurrent-request limit from the Firecrawl dashboard. The limits are two constants at the top of `lib/aghm-nwp-stack.ts`: `FIRECRAWL_PAGES_PER_BATCH` (the function's `FIRECRAWL_CONCURRENCY`, NWP-PRICE-002) and `FIRECRAWL_PLAN_BROWSERS`; the workflow runs `browsers ÷ pages per batch` batches at once (NWP-PRICE-011).
+**Project limits (confirmed):** 1,000 Firecrawl credits per refresh, and 2 concurrent requests.
+
+**Cost per page:** a JSON-format scrape costs 5 credits (1 base + 4 for JSON) at the time of writing. Cached results are charged in full.
+
+**Weekly volume:** `scripts/seed-distributor-sources.ts` registers **21 active listing pages**. That's 21 × 5 = **105 credits per weekly run**, and about **457 credits per month** (× 4.35 weekly runs).
+
+| Vendor | Active pages | Distributors |
+| --- | --- | --- |
+| TP-Link Omada | 6 (includes the Shopee demo source) | 4 |
+| Cisco Business | 5 | 5 |
+| Ubiquiti UniFi | 4 | 4 |
+| Ruijie | 4 | 4 |
+| HPE Aruba Instant On | 2 | 1 |
+
+**Pagination:** each extra page of a listing needs its own source row (`?page=2`, …) and adds 5 credits per run (about 22 per month).
+- Wired Systems' Omada collection shows 20 of 32 products on its first page, so it needs a `?page=2` row.
+- XBS Asia's Cisco tag page should be checked the same way.
+
+With two extra pages, a run is 115 credits, about 500 per month.
+
+**Against the limit:** if the 1,000-credit allowance refreshes monthly, the weekly job uses about half of it. Manual runs (`pricing:smoke`, QA batches, a manual workflow execution) spend from the same allowance. A full manual run costs the same as a weekly run.
+
+**Duplicates:** `pricing_source` rows that were seeded more than once are scraped and charged once per copy. Check for duplicates before a run (`SELECT vendor_id, distributor_id, source_url, count(*) FROM pricing_source GROUP BY 1, 2, 3 HAVING count(*) > 1;`).
+
+**Concurrency:** the two limits are constants at the top of `lib/aghm-nwp-stack.ts`:
+- `FIRECRAWL_PAGES_PER_BATCH = 2` (the function's `FIRECRAWL_CONCURRENCY`, NWP-PRICE-002);
+- `FIRECRAWL_PLAN_BROWSERS = 2` (the plan's 2 concurrent requests).
+
+The workflow runs `browsers ÷ pages per batch` = 1 batch at a time (NWP-PRICE-011), so at most 2 requests are ever in flight. Raise `FIRECRAWL_PLAN_BROWSERS` only after upgrading the plan.
 
 ### Tests
 

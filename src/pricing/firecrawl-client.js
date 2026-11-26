@@ -176,7 +176,10 @@ function createFirecrawlClient({
    * Scrapes one distributor product page and extracts JSON with Firecrawl.
    * @param {string} url
    * @param {ScrapeOptions} [options]
-   * @returns {Promise<ScrapeResult>}
+   * @returns {Promise<ScrapeResult>}  every request failure (timeout, blocked, http_error, ...) is returned
+   *   here as a typed failure result, never thrown
+   * @throws {TypeError} only for a programmer error: neither `options.schema` (an object) nor `options.prompt`
+   *   (a non-empty string) was given. No request is sent in that case.
    */
   async function scrapeProductPage(url, options = {}) {
     const { schema, prompt } = options;
