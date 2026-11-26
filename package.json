@@ -11,9 +11,11 @@
     "seed:devices": "node --import tsx scripts/seed-devices.ts",
     "seed:unifi-devices": "tsx scripts/seed-unifi-devices.ts",
     "insert:unifi-productlines": "tsx scripts/insert-unifi-productlines.ts",
+    "pricing:smoke": "node --env-file=.env scripts/firecrawl-smoke.js",
+    "seed:reyee-productlines": "tsx scripts/insert-reyee-productlines.ts",
+    "seed:reyee-devices": "tsx scripts/seed-reyee-devices.ts",
     "insert:grandstream-productlines": "tsx scripts/insert-grandstream-productlines.ts",
-    "seed:grandstream-devices": "tsx scripts/seed-grandstream-devices.ts",
-    "pricing:smoke": "node --env-file=.env scripts/firecrawl-smoke.js"
+    "seed:grandstream-devices": "tsx scripts/seed-grandstream-devices.ts"
   },
   "devDependencies": {
     "@swc/core": "^1.15.0",
