@@ -88,7 +88,7 @@ describe('normalizeRecord: rejected products', () => {
     ['SKU not in the vendor catalog', { sku: 'ER7206', price: '3990' }, R.NO_SKU_MATCH],
     ['SKU with extra text', { sku: 'ER605 V2', price: '3990' }, R.NO_SKU_MATCH],
     ['no price', { sku: 'ER605' }, R.MISSING_FIELD],
-    ['price range', { sku: 'ER605', price: '3,500 - 3,990' }, R.INVALID_PRICE],
+    ['price range with an unusable end', { sku: 'ER605', price: '3,500 - Call for price' }, R.INVALID_PRICE],
     ['foreign currency', { sku: 'ER605', price: '$75' }, R.INVALID_PRICE],
     ['zero price', { sku: 'ER605', price: '₱0.00' }, R.INVALID_PRICE],
     ['text instead of price', { sku: 'ER605', price: 'Call for price' }, R.INVALID_PRICE],
@@ -273,5 +273,14 @@ describe('matchSku: layered, never guessing (store spellings)', () => {
     const result = normalizeListing(products, SOURCE, index, RETRIEVED_AT);
     assert.deepEqual(result.records.map((r) => [r.deviceId, r.price, r.pageSku]), [[1, '2190.00', 'TL-SG2008'], [3, '9450.00', 'U6 Pro']]);
     assert.equal(result.unmatched, 1);   // the ambiguous one is skipped, not guessed
+  });
+});
+
+describe('normalizeRecord: price ranges on listings (decision by G, 2026-11-26)', () => {
+  test('a range stores its higher end', () => {
+    const result = normalizeRecord({ sku: 'ER605', price: '₱3,500 - ₱3,990' }, SOURCE, INDEX, RETRIEVED_AT);
+    assert.equal(result.ok, true);
+    assert.equal(result.record.price, '3990.00');
+    assert.equal(result.record.priceCentavos, 399000);
   });
 });

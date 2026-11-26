@@ -220,7 +220,8 @@ function normalizeOne(raw, source, skuIndex, retrievedDate) {
     });
   }
 
-  const parsed = parsePrice(extracted.price);
+  // Listings show a range for products with variants; the higher end is stored (decision by G, 2026-11-26).
+  const parsed = parsePrice(extracted.price, { rangeUpperBound: true });
   if (!parsed.ok) {
     return reject(NORMALIZE_REJECT_REASONS.INVALID_PRICE, `${parsed.detail} Raw value: ${show(extracted.price)}.`, {
       deviceId, pageSku: extracted.sku,
