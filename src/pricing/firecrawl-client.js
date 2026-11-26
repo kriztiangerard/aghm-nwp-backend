@@ -6,7 +6,8 @@
 // - Uses Firecrawl's JSON format with a caller-supplied schema, so no site-specific parsers are needed.
 // - Request failures are returned as typed results; the function never throws for them.
 //   It throws a TypeError only for programmer errors (no schema and no prompt).
-// - CAPTCHA and anti-bot blocks are reported as `blocked`. The wrapper never sends options meant to
+// - CAPTCHA and anti-bot blocks are reported as `blocked`: refused statuses (401/403/429/451), and login
+//   walls or bot checks served with HTTP 200 (detectAccessWall). The wrapper never sends options meant to
 //   solve or get around them, and never retries (retry policy lives in NWP-PRICE-004).
 
 const { FIRECRAWL_ERROR_TYPES: E } = require('./firecrawl-errors');
@@ -24,6 +25,15 @@ const MAX_MESSAGE_LENGTH = 500;
 const BLOCKED_TARGET_STATUSES = new Set([401, 403, 429, 451]);
 // Target-site statuses that mean the configured product page no longer exists.
 const MISSING_PAGE_STATUSES = new Set([404, 410]);
+
+// Access walls served with HTTP 200 (NWP-PRICE-007 AC5, QA: the Shopee store answers 200 with a login page,
+// which Firecrawl extracts as a "product" named "Login Required"). Only reported, never solved or bypassed.
+// A path segment of the final URL that means a login or bot-check page:
+const WALL_PATH = /\/(login|log-in|signin|sign-in|account\/login|buyer\/login|auth|captcha|challenge|verify)(\/|$|\?)/i;
+// Page titles of login and bot-check pages:
+const WALL_TITLE = /^\s*(log\s?in|sign\s?in)\b|\b(captcha|access denied|attention required|security check|are you (a )?(human|robot)|verify (that )?you('re| are) (a )?human|unusual traffic)\b/i;
+// Extracted item names that are a wall message rather than a product (only used when EVERY item matches):
+const WALL_ITEM = /^\s*(log\s?in|sign\s?in)( (is )?required| now| to continue| first)?\s*[.!]?\s*$|\b(log\s?in|sign\s?in) (is )?required\b|\b(please|you must|need to) (log\s?in|sign\s?in)\b|\bcaptcha\b|\baccess denied\b|\bverify (that )?you('re| are) (a )?human\b/i;
 
 /**
  * @typedef {Object} ScrapeOptions
@@ -142,6 +152,43 @@ function mapTargetStatus(targetStatusCode, metadataError, httpStatus, sanitize) 
   if (BLOCKED_TARGET_STATUSES.has(targetStatusCode)) return failure(E.BLOCKED, message, extra);
   if (MISSING_PAGE_STATUSES.has(targetStatusCode)) return failure(E.INVALID_URL, message, extra);
   return failure(E.HTTP_ERROR, message, extra);
+}
+
+/** Every `name` / `title` string in the extracted JSON (object or listing array), at most 3 levels deep. */
+function itemNames(value, depth = 0, names = []) {
+  if (depth > 3 || value === null || typeof value !== 'object') return names;
+  if (Array.isArray(value)) {
+    value.forEach((item) => itemNames(item, depth + 1, names));
+    return names;
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    if ((key === 'name' || key === 'title') && typeof entry === 'string' && entry.trim()) names.push(entry.trim());
+    else if (entry !== null && typeof entry === 'object') itemNames(entry, depth + 1, names);
+  }
+  return names;
+}
+
+/**
+ * Detects a login wall or bot check that the distributor served with HTTP 200 (AC5). Returns a short reason,
+ * or null. Three signals, any one is enough:
+ *   1. Firecrawl's final URL is a login/bot-check path the requested URL was not (a redirect to a wall);
+ *   2. the page title is a login or bot-check title;
+ *   3. every item extracted from the page is a wall message (no real product came back).
+ * The page is only classified; nothing is ever sent to get past it.
+ */
+function detectAccessWall(requestedUrl, metadata, json) {
+  const finalUrl = typeof metadata.url === 'string' ? metadata.url : null;
+  if (finalUrl && WALL_PATH.test(new URL(finalUrl, requestedUrl).pathname + '/')
+      && !WALL_PATH.test(new URL(requestedUrl).pathname + '/')) {
+    return `redirected to a login or bot-check page (${new URL(finalUrl, requestedUrl).pathname})`;
+  }
+  const title = [metadata.title, metadata.ogTitle].find((value) => typeof value === 'string' && value.trim());
+  if (title && WALL_TITLE.test(title)) return `the page is a login or bot-check page (title "${title.trim()}")`;
+  const names = itemNames(json);
+  if (names.length > 0 && names.every((name) => WALL_ITEM.test(name))) {
+    return `the page shows a login or bot-check message instead of products ("${names[0]}")`;
+  }
+  return null;
 }
 
 function buildRequestBody(url, { schema, prompt, pageTimeoutMs, country }) {
@@ -263,6 +310,21 @@ function createFirecrawlClient({
 
     const targetFailure = mapTargetStatus(targetStatusCode, metadataError, response.status, sanitize);
     if (targetFailure) return targetFailure;
+
+    // A wall served with HTTP 200 is a block, not content (AC5). Checked before empty_content, so an empty
+    // extraction from a login page is reported as what it is.
+    let wall = null;
+    try {
+      wall = detectAccessWall(url, metadata, data.json);
+    } catch (err) {
+      wall = null;   // an unparsable metadata URL is not evidence of a wall
+    }
+    if (wall) {
+      return failure(E.BLOCKED, sanitize(`Distributor site returned HTTP ${targetStatusCode || 200} but ${wall}.`), {
+        httpStatus: response.status,
+        targetStatusCode,
+      });
+    }
 
     if (!isPlainObject(data.json) || hasNoUsableValues(data.json)) {
       return failure(E.EMPTY_CONTENT, 'Firecrawl returned no usable JSON for this page.', {

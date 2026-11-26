@@ -302,3 +302,79 @@ describe('scrapeProductPage: safety', () => {
     }
   });
 });
+
+describe('scrapeProductPage: access walls served with HTTP 200 (AC5, QA: Shopee login page)', () => {
+  const SHOPEE = 'https://shopee.ph/tplink.philippines';
+  function wallBody({ json = { products: [{ sku: 'ER605', name: 'Omada ER605 Gigabit VPN Router', price: '₱3,990.00' }] }, ...meta } = {}) {
+    return { success: true, data: { json, metadata: { sourceURL: SHOPEE, statusCode: 200, ...meta } } };
+  }
+
+  test('the real Shopee result (one item named "Login Required", price N/A) is blocked, not a success', async () => {
+    const { client } = makeClient(async () => jsonResponse(200, wallBody({ json: { name: 'Login Required', price: 'N/A' } })));
+
+    const result = await client.scrapeProductPage(SHOPEE, { schema: SCHEMA });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.errorType, E.BLOCKED);
+    assert.equal(result.httpStatus, 200);
+    assert.equal(result.targetStatusCode, 200);
+    assert.match(result.message, /HTTP 200 but the page shows a login or bot-check message instead of products \("Login Required"\)/);
+  });
+
+  test('the same wall in the listing shape ({ products: [...] }) is blocked', async () => {
+    const json = { products: [{ sku: '', name: 'Please log in to continue', price: '' }] };
+    const { client } = makeClient(async () => jsonResponse(200, wallBody({ json })));
+    assert.equal((await client.scrapeProductPage(SHOPEE, { schema: SCHEMA })).errorType, E.BLOCKED);
+  });
+
+  test('a redirect to a login page is blocked', async () => {
+    const { client } = makeClient(async () => jsonResponse(200, wallBody({ url: 'https://shopee.ph/buyer/login?next=%2Ftplink.philippines' })));
+    const result = await client.scrapeProductPage(SHOPEE, { schema: SCHEMA });
+    assert.equal(result.errorType, E.BLOCKED);
+    assert.match(result.message, /redirected to a login or bot-check page \(\/buyer\/login\)/);
+  });
+
+  for (const title of ['Login Now to Start Shopping | Shopee Philippines', 'Attention Required! | Cloudflare', 'Just a moment... verify you are human']) {
+    test(`a wall title is blocked: "${title}"`, async () => {
+      const { client } = makeClient(async () => jsonResponse(200, wallBody({ title })));
+      assert.equal((await client.scrapeProductPage(SHOPEE, { schema: SCHEMA })).errorType, E.BLOCKED);
+    });
+  }
+
+  test('an empty extraction from a login page is reported as blocked, not empty_content', async () => {
+    const { client } = makeClient(async () => jsonResponse(200, wallBody({ json: { products: [] }, title: 'Sign in | Store' })));
+    assert.equal((await client.scrapeProductPage(SHOPEE, { schema: SCHEMA })).errorType, E.BLOCKED);
+  });
+
+  test('a real listing is not affected: normal title, same URL, real products', async () => {
+    const json = { products: [
+      { sku: 'OC200', name: 'Omada Hardware Controller OC200', price: '₱4,390.00' },
+      { sku: 'ER605', name: 'Omada ER605 Gigabit VPN Router', price: '₱3,990.00' },
+    ] };
+    const { client } = makeClient(async () => jsonResponse(200, wallBody({ json, title: 'TP-Link Omada | Store', url: SHOPEE })));
+    const result = await client.scrapeProductPage(SHOPEE, { schema: SCHEMA });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.json, json);
+  });
+
+  test('one oddly named item among real products does not make the page a wall', async () => {
+    const json = { products: [
+      { sku: 'X1', name: 'Login Required', price: 'N/A' },
+      { sku: 'ER605', name: 'Omada ER605 Gigabit VPN Router', price: '₱3,990.00' },
+    ] };
+    const { client } = makeClient(async () => jsonResponse(200, wallBody({ json })));
+    assert.equal((await client.scrapeProductPage(SHOPEE, { schema: SCHEMA })).ok, true);
+  });
+
+  test('product names that only contain wall-like words are not walls', async () => {
+    const json = { products: [{ sku: 'EAP', name: 'Access Point with Captive Portal Sign-In Page', price: '₱5,000' }] };
+    const { client } = makeClient(async () => jsonResponse(200, wallBody({ json, title: 'Access Points | Store' })));
+    assert.equal((await client.scrapeProductPage(SHOPEE, { schema: SCHEMA })).ok, true);
+  });
+
+  test('a store whose own URL contains /auth is not treated as a redirect', async () => {
+    const authUrl = 'https://store.example.ph/auth/omada';
+    const { client } = makeClient(async () => jsonResponse(200, { success: true, data: { json: { sku: 'ER605', price: '₱3,990.00' }, metadata: { sourceURL: authUrl, url: authUrl, statusCode: 200 } } }));
+    assert.equal((await client.scrapeProductPage(authUrl, { schema: SCHEMA })).ok, true);
+  });
+});
