@@ -9,7 +9,7 @@ const {
   createHandler, ACTIONS, UnknownActionError, DEFAULT_ACTIONS_FOR_TEST,
 } = require('../../src/pricing/handler');
 const { loadPricingConfig, DEFAULTS } = require('../../src/pricing/config');
-const { probeOutbound, ProbeFailedError, DEFAULT_PROBE_URL } = require('../../src/pricing/probe');
+const { probeOutbound, ProbeFailedError, DEFAULT_PROBE_URL, probeDatabase, DatabaseUnavailableError } = require('../../src/pricing/probe');
 const { withTransaction } = require('../../src/pricing/db');
 
 function silentLogger() {
@@ -194,5 +194,36 @@ describe('withTransaction', () => {
 
   test('rejects a missing work function', async () => {
     await assert.rejects(withTransaction(null, { pool: fakePool().pool }), TypeError);
+  });
+});
+
+describe('probeDatabase (AC1: reaches RDS)', () => {
+  test('one query through the pool; reports the database name, nothing else', async () => {
+    const query = mock.fn(async () => ({ rows: [{ name: 'nwp_qa' }] }));
+    const result = await probeDatabase({ getPool: async () => ({ query }) });
+
+    assert.deepEqual(result, { database: 'reachable', databaseName: 'nwp_qa' });
+    assert.equal(query.mock.callCount(), 1);
+    assert.match(query.mock.calls[0].arguments[0], /^SELECT current_database\(\)/);
+  });
+
+  test('a connection error becomes DatabaseUnavailableError', async () => {
+    const getPool = async () => ({ query: async () => { throw new Error('connect ETIMEDOUT 10.0.1.5:5432'); } });
+    await assert.rejects(probeDatabase({ getPool }), (error) => {
+      assert.ok(error instanceof DatabaseUnavailableError);
+      assert.match(error.message, /could not be reached: connect ETIMEDOUT/);
+      return true;
+    });
+  });
+
+  test('an unanswered query fails after the timeout instead of hanging', async () => {
+    const getPool = async () => ({ query: () => new Promise(() => {}) });
+    const started = Date.now();
+    await assert.rejects(probeDatabase({ getPool, timeoutMs: 50 }), /no answer within 50 ms/);
+    assert.ok(Date.now() - started < 1000);
+  });
+
+  test('a pool that cannot be created (for example the secret) is reported the same way', async () => {
+    await assert.rejects(probeDatabase({ getPool: async () => { throw new Error('AccessDenied'); } }), DatabaseUnavailableError);
   });
 });

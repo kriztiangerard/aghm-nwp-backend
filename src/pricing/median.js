@@ -28,8 +28,12 @@ function computeMedian(centavosList) {
   const sorted = [...centavosList].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 1) return sorted[mid];
-  // Mean of the two middle values, rounded half-up to the centavo: floor((a + b + 1) / 2) for a, b >= 0.
-  return Math.floor((sorted[mid - 1] + sorted[mid] + 1) / 2);
+  // Mean of the two middle values, rounded half-up to the centavo. Written as a + floor((b - a + 1) / 2), which
+  // equals floor((a + b + 1) / 2) for 0 <= a <= b but never adds a and b, so it stays exact for every safe
+  // integer (a + b can pass Number.MAX_SAFE_INTEGER; b - a + 1 is at most 2^53, which is still exact).
+  const a = sorted[mid - 1];
+  const b = sorted[mid];
+  return a + Math.floor((b - a + 1) / 2);
 }
 
 /**
@@ -83,6 +87,13 @@ async function refreshDeviceMedians(client, deviceIds, { includeStale = false, u
     throw new TypeError('refreshDeviceMedians: deviceIds must be an array of integers.');
   }
   if (typeof includeStale !== 'boolean') throw new TypeError('refreshDeviceMedians: includeStale must be a boolean.');
+  // price_updated_at is sent as a UTC ISO string, never a Date: node-pg sends a Date in the machine's local
+  // time, and the TIMESTAMP column (no time zone) would keep PH time from a laptop but UTC from the Lambda.
+  const updatedAtDate = updatedAt instanceof Date ? updatedAt : new Date(updatedAt);
+  if (Number.isNaN(updatedAtDate.getTime())) {
+    throw new TypeError('refreshDeviceMedians: updatedAt must be a valid Date or ISO date string.');
+  }
+  const updatedAtUtc = updatedAtDate.toISOString();
   const ids = [...new Set(deviceIds)].sort((a, b) => a - b);
   if (ids.length === 0) return { updated: [], unchanged: [] };
 
@@ -108,7 +119,7 @@ async function refreshDeviceMedians(client, deviceIds, { includeStale = false, u
     // eslint-disable-next-line no-await-in-loop
     await client.query(
       'UPDATE device SET price = $2, price_updated_at = $3 WHERE device_id = $1',
-      [deviceId, price, updatedAt],
+      [deviceId, price, updatedAtUtc],
     );
     updated.push({ deviceId, price, prices: used });
   }
