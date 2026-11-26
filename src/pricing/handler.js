@@ -6,7 +6,7 @@
 //
 //   probe            check outbound internet access and that the Firecrawl key can be read   (this story)
 //   plan             list active sources and group them into batches               (NWP-PRICE-011)
-//   process          scrape and store one vendor x distributor batch                (NWP-PRICE-002/004)
+//   process          scrape and store one vendor x distributor batch                (NWP-PRICE-002; 004 adds outcomes)
 //   markBatchFailed  record a whole batch as failed after a crash or timeout        (NWP-PRICE-011)
 //   finalize         medians, manual review, run result                             (NWP-PRICE-011)
 //
@@ -15,7 +15,8 @@
 
 const { loadPricingConfig } = require('./config');
 const { probeOutbound } = require('./probe');
-const { getFirecrawlApiKey } = require('./firecrawl-secret');   // NWP-PRICE-007: merge 007 before this branch
+const { getFirecrawlApiKey } = require('./firecrawl-secret');
+const { processSourceBatch } = require('./collect');   // NWP-PRICE-007: merge 007 before this branch
 
 const ACTIONS = Object.freeze({
   PROBE: 'probe',
@@ -57,7 +58,8 @@ const DEFAULT_ACTIONS = Object.freeze({
     return { ...outbound, firecrawlKey: 'readable', ...database };
   },
   [ACTIONS.PLAN]: notImplemented(ACTIONS.PLAN, 'NWP-PRICE-011'),
-  [ACTIONS.PROCESS]: notImplemented(ACTIONS.PROCESS, 'NWP-PRICE-002'),
+  // event: { action: 'process', runAt, vendorId, distributorId, sources: [{ sourceId, sourceUrl }] }
+  [ACTIONS.PROCESS]: async (event, { config }) => processSourceBatch(event, { concurrency: config.firecrawlConcurrency }),
   [ACTIONS.MARK_BATCH_FAILED]: notImplemented(ACTIONS.MARK_BATCH_FAILED, 'NWP-PRICE-011'),
   [ACTIONS.FINALIZE]: notImplemented(ACTIONS.FINALIZE, 'NWP-PRICE-011'),
 });

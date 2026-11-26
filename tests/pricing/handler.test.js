@@ -49,7 +49,7 @@ describe('handler: action routing', () => {
   test('actions from later stories say which story builds them', async () => {
     const handler = createHandler({ logger: silentLogger() });
 
-    const expected = { plan: 'NWP-PRICE-011', process: 'NWP-PRICE-002', markBatchFailed: 'NWP-PRICE-011', finalize: 'NWP-PRICE-011' };
+    const expected = { plan: 'NWP-PRICE-011', markBatchFailed: 'NWP-PRICE-011', finalize: 'NWP-PRICE-011' };   // process: NWP-PRICE-002, built
     for (const [action, story] of Object.entries(expected)) {
       await assert.rejects(handler({ action }), (error) => {
         assert.ok(error instanceof NotImplementedError);

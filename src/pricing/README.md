@@ -9,6 +9,10 @@ Tests are in `tests/pricing/` and run with `node --test tests/pricing/*.test.js`
 | File | Story | Purpose |
 | --- | --- | --- |
 | `handler.js` | 010 | Lambda entry point. Dispatches on `event.action`: `probe`, `plan`, `process`, `markBatchFailed`, `finalize`. Actions not built yet throw `NotImplementedError` naming their story. |
+| `collect.js` | 002 | `processSourceBatch()`: the `process` action. Scrapes one batch, combines its pages, stores found prices, returns a summary. |
+| `extraction.js` | 002 | `LISTING_SCHEMA`, the Firecrawl JSON schema for a listing page (`{ products: [{ sku, name, price }] }`), and `readProducts()`. |
+| `sources.js` | 002 | `listActiveSources()` and `loadVendorSkuIndex()`. |
+| `price-store.js` | 002 | `upsertSynchronizedPrice()`: one `pricing` row per device and distributor; replaces a manual row. |
 | `config.js` | 010 | `loadPricingConfig()`: reads `FIRECRAWL_CONCURRENCY` and `PRICE_MEDIAN_INCLUDE_STALE`; a malformed value throws. |
 | `probe.js` | 010 | `probeOutbound()`: one unauthenticated GET to the Firecrawl API host to prove outbound HTTPS works (no key, no credits). |
 | `db.js` | 010 | Reuses the engine's database pool; `withTransaction()`. |
@@ -40,7 +44,7 @@ Sources are distributor **listing pages**, one `pricing_source` row per page URL
 2. Run `scripts/deactivate-replaced-sources.sql` to turn off retired URLs.
 3. Run `npx tsx scripts/seed-distributor-sources.ts`. It's safe to run again; existing rows are skipped.
 
-Grandstream GWN Cloud has no scraped sources (no Philippine store lists it with prices), so its prices are entered manually.
+A vendor whose listing spans several pages needs one source row per page URL (see Pagination below). Grandstream GWN Cloud has no scraped sources (no Philippine store lists it with prices), so its prices are entered manually.
 
 ### Local check
 
@@ -77,6 +81,47 @@ A working setup returns `"ok": true`, an HTTP status and `"firecrawlKey": "reada
 | --- | --- | --- |
 | `FIRECRAWL_CONCURRENCY` | `2` | Pages scraped at once. Keep it at or below the Firecrawl plan's concurrent browsers (Free 2, Hobby 5); extra requests only queue. |
 | `PRICE_MEDIAN_INCLUDE_STALE` | `false` | Whether stale synchronized prices join the median when at least one fresh price exists (NWP-PRICE-008). |
+
+## Price collection (NWP-PRICE-002)
+
+A **batch** is every active source of one vendor and one distributor, so all of a distributor's pages are read before a device can be called missing (NWP-PRICE-004). The weekly workflow (NWP-PRICE-011) invokes the Lambda once per batch:
+
+```json
+{ "action": "process", "runAt": "2026-11-23T02:00:00.000Z", "vendorId": 1, "distributorId": 7,
+  "sources": [{ "sourceId": 101, "sourceUrl": "https://…?page=1" }, { "sourceId": 102, "sourceUrl": "https://…?page=2" }] }
+```
+
+`runAt` is the run's shared start time; every batch of a run passes the same value.
+
+### Steps
+
+1. **Catalog check:** the vendor's devices become a SKU index. A vendor with no devices is skipped without scraping (pages report `skipped`), so it costs no credits.
+2. **Scrape:** each page is scraped with `LISTING_SCHEMA`, at most `FIRECRAWL_CONCURRENCY` at once. A page with no product list is `empty_content`; a failed page reports its Firecrawl error type.
+3. **Normalize:** each page goes through `normalizeListing()` (below). Products not in the catalog are counted, not failed.
+4. **Combine pages:** a device found on two pages at the same price is stored once (from the first page); at different prices it is stored from neither and reported as `invalid_price`. A usable price on one page wins over a rejection on another.
+5. **Store:** each found device in its own transaction: `upsertSynchronizedPrice()` then `markSyncSuccess()` (NWP-PRICE-005; a no-op until that story lands). A synchronized price replaces a manual one and sets `source_id`.
+
+Not here: retries, stopping on account-level errors, `update_log` rows and marking prices stale (NWP-PRICE-004/005).
+
+### Summary returned
+
+```json
+{ "runAt": "…", "vendorId": 1, "distributorId": 7,
+  "pages": [{ "sourceId": 101, "status": "success", "productCount": 32, "matched": 14, "unmatched": 18, "rejectedWithoutDevice": 0, "creditsUsed": 5 },
+            { "sourceId": 102, "status": "blocked", "productCount": 0, "message": "…" }],
+  "found": [11, 12], "rejected": [{ "deviceId": 13, "reason": "invalid_price", "detail": "…" }],
+  "stored": { "inserted": 1, "updated": 1 } }
+```
+
+`found` and `rejected` are what NWP-PRICE-004 uses to record an outcome per device; a device in neither was not seen on any page.
+
+### Pagination
+
+The scraper reads exactly the URL it is given and never follows links. A store that spreads a vendor over several pages needs one `pricing_source` row per page URL (for example `?page=2`), all with the same vendor and distributor, so they form one batch. Check each listing's page count when adding a source: for example, Wired Systems' Omada collection shows 20 of 32 products per page.
+
+### Tuning the extraction
+
+If a store's products come back without SKUs or with the store's own item codes, adjust the descriptions in `LISTING_SCHEMA` and check with `npm run pricing:smoke -- <url>` (it uses the same schema). Do not add per-site code.
 
 ## Price normalization (NWP-PRICE-003)
 
