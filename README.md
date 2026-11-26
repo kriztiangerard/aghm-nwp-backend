@@ -200,7 +200,7 @@ Every **Sunday at 02:00 (Asia/Manila)**, EventBridge Scheduler starts the `Price
 5. **Finalize:** recalculates device medians, evaluates manual review, and logs one `run-summary` line.
 6. **Stop fck-nat** if this execution started it, also when any step failed.
 
-The execution ends **Failed** when a step failed, or when no price was collected at all (`PriceSync.NoPriceCollected`), so a broken run is visible in the Step Functions console.
+The execution ends **Failed** when a step failed, when no price was collected at all (`PriceSync.NoPriceCollected`), or when some devices' outcomes weren't recorded (`PriceSync.OutcomesMissing`, see Recovery), so a broken run is visible in the Step Functions console.
 
 ### Setup (once)
 
@@ -226,7 +226,56 @@ Then check:
 - **CloudWatch** (Price updater log group): one line per page (`"event":"page"`), and one `"event":"run-summary"` line with `successful`, `byStatus`, `mediansUpdated`, `devicesNeedingReview` and `stoppedBy`.
 - **EC2 console:** fck-nat is stopped again (if it was stopped before the run).
 
-Don't stop an execution by hand while it runs, and keep runs under the state machine's 6-hour timeout: neither runs the cleanup, so fck-nat would stay on. If that happens, stop the instance in the EC2 console.
+Don't stop an execution by hand while it runs, and keep runs under the state machine's 6-hour timeout: neither runs the cleanup, so fck-nat would stay on (see Recovery below).
+
+### Recovery
+
+#### fck-nat left running (AC8)
+
+The workflow stops fck-nat on every failure path, but AWS gives it no chance to clean up in two cases: the 6-hour execution timeout, and **Stop execution** in the console. In both, fck-nat stays on until someone stops it. Nothing breaks, but the instance keeps running and billing. The team accepted this limit (decision by G, 2026-11-26), so recovery is by hand:
+
+1. **Spot it.**
+   - In the Step Functions console, the execution's status is **Timed out** or **Aborted**, not Failed or Succeeded.
+   - In the EC2 console, the fck-nat instance is still **Running** after the run.
+2. **Decide whether to stop it.** Stop it only if the workflow started it: it was stopped before the run. Open the execution's history and look for a `StartNat` step:
+   - **`StartNat` is there:** this run turned fck-nat on, so stop it.
+   - **No `StartNat`:** fck-nat was already running when the run began (someone needed it), so leave it on.
+3. **Make sure no other execution is running** (Step Functions console, **Running** filter). A run in progress needs fck-nat.
+4. **Stop it:** EC2 console → the fck-nat instance → **Instance state → Stop instance**, or:
+   ```bash
+   aws ec2 stop-instances --instance-ids <fckNatInstanceId from cdk.json>
+   ```
+5. **Prices from that run:** batches that finished before the timeout or stop are stored and recorded. Finalize did not run, so medians and the manual-review flags weren't updated. Run finalize for that run by hand (next section, step 3), or let next Sunday's run catch up.
+
+#### Outcomes missing (AC5)
+
+The execution ends **Failed** with `PriceSync.OutcomesMissing` when some devices have no `update_log` row for the run. Usually a batch failed and then `markBatchFailed` failed too, so that batch's failures were never recorded (no stale flag, no failure count). The run-summary log line lists them under `unrecorded`, one entry per batch, and an `"event":"outcomes-missing"` error line follows it:
+
+```json
+"unrecordedDevices": 2,
+"unrecorded": [{ "vendorId": 3, "distributorId": 7, "devices": 2, "deviceIds": [21, 22] }]
+```
+
+After an account-level stop (`stoppedBy` set), the skipped batches are listed here too, but that's expected: the execution doesn't fail for it, and next week's run covers them.
+
+To recover, using the run's `runAt` from the summary line:
+
+1. **Get the batch's sources** (vendor and distributor from the `unrecorded` entry):
+   ```sql
+   SELECT source_id, source_url FROM pricing_source
+    WHERE is_active AND vendor_id = <vendorId> AND distributor_id = <distributorId> ORDER BY source_id;
+   ```
+2. **Record the failures** for that batch. Invoke the Price updater with:
+   ```json
+   { "action": "markBatchFailed",
+     "batch": { "runAt": "<runAt>", "vendorId": <vendorId>, "distributorId": <distributorId>,
+                "sources": [{ "sourceId": <id>, "sourceUrl": "<url>" }] },
+     "error": { "Error": "ManualRecovery", "Cause": "markBatchFailed failed during the run; recorded by hand" } }
+   ```
+   Running it twice is safe: devices already recorded are skipped.
+3. **Finalize again:** `{ "action": "finalize", "runAt": "<runAt>", "stop": null }`. This is also safe to repeat. The new summary line should show `"unrecordedDevices": 0`.
+
+Invoke from the CLI with `aws lambda invoke --function-name <PriceUpdaterFunctionName output> --payload fileb://event.json out.json`. Put the JSON in `event.json`.
 
 ## Price Updater: Manual Review
 

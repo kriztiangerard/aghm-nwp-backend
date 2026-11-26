@@ -213,9 +213,11 @@ The `PriceSync` Standard state machine (`lib/price-sync-workflow.ts`) runs every
   ```json
   { "source": "price-updater", "event": "run-summary", "runAt": "…", "successful": true, "rows": 52,
     "byStatus": { "success": 47, "blocked": 5 }, "devicesNeedingReview": 0,
-    "devices": 30, "mediansUpdated": 28, "mediansUnchanged": 2, "flaggedInRun": 0, "stoppedBy": null }
+    "devices": 30, "mediansUpdated": 28, "mediansUnchanged": 2, "flaggedInRun": 0, "stoppedBy": null,
+    "unrecordedDevices": 0, "unrecorded": [] }
   ```
-- **The execution fails** when any step fails (after stopping fck-nat, if it started it), or when `successful` is false (`PriceSync.NoPriceCollected`).
+- **Unrecorded outcomes (AC5):** finalize also lists, under `unrecorded`, devices last priced from an active source that have no `update_log` row for the run. There's one entry per vendor × distributor, which is one batch. If `stoppedBy` isn't set, this means a batch's failure was never recorded (for example, `markBatchFailed` itself failed). An `outcomes-missing` error line is logged, and the execution fails. The root README has the recovery steps.
+- **The execution fails** when any step fails (after stopping fck-nat, if it started it), when `successful` is false (`PriceSync.NoPriceCollected`), or when outcomes are missing without an account-level stop (`PriceSync.OutcomesMissing`).
 
 ## Timestamps
 
