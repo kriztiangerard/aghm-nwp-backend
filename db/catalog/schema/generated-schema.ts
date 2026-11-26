@@ -17,7 +17,7 @@ export const generatedDeviceSchemas = z.union([z.intersection(z.object({ "device
 /**Form factor of the SFP ports. Required when sfp_ports > 0.*/
 "sfp_form_factor": z.enum(["SFP","SFP+","SFP28","QSFP+","QSFP28"]).describe("Form factor of the SFP ports. Required when sfp_ports > 0.").optional() }).describe("Gateway/router specifications table."),
 /**Present only when this gateway/router is ALSO capability-tagged as a firewall (dual-role device, e.g. UniFi UDM-Pro). Omit entirely for a plain gateway with no firewall role — don't send null, just leave the key out.*/
-"firewall_specs": z.object({ "firewall_throughputs_mbps": z.number().int().gte(0), "vpn_throughput_mbps": z.number().int().gte(0).optional(),
+"firewall_specs": z.object({ "firewall_throughputs_mbps": z.number().int().gte(0).optional(), "vpn_throughput_mbps": z.number().int().gte(0).optional(),
 /**IDS/IPS throughput in Mbps. null or omitted = unknown; the engine raises a flag and never guesses.*/
 "idps_throughput_mbps": z.union([z.number().int().gte(0).describe("IDS/IPS throughput in Mbps. null or omitted = unknown; the engine raises a flag and never guesses."), z.null().describe("IDS/IPS throughput in Mbps. null or omitted = unknown; the engine raises a flag and never guesses.")]).describe("IDS/IPS throughput in Mbps. null or omitted = unknown; the engine raises a flag and never guesses.").optional(), "max_concurrent_sessions": z.number().int().gte(0).optional(), "wan_ports": z.number().int().gte(0).optional(), "lan_ports": z.number().int().gte(0).optional(), "max_power_draw_w": z.number().gte(0).optional() }).describe("Present only when this gateway/router is ALSO capability-tagged as a firewall (dual-role device, e.g. UniFi UDM-Pro). Omit entirely for a plain gateway with no firewall role — don't send null, just leave the key out.").optional(),
 /**Present only when this gateway/router has an integrated switch (e.g. Omada ER7212PC with built-in PoE ports). Omit entirely for a plain gateway. The engine counts ports from this block, so gateway_router_specs.lan_ports must be 0 whenever switch_specs is present (enforced below).*/
@@ -31,15 +31,13 @@ export const generatedDeviceSchemas = z.union([z.intersection(z.object({ "device
 /**Form factor of the SFP ports. Required when sfp_ports > 0.*/
 "sfp_form_factor": z.enum(["SFP","SFP+","SFP28","QSFP+","QSFP28"]).describe("Form factor of the SFP ports. Required when sfp_ports > 0.").optional() }).describe("Present only when this gateway/router has an integrated switch (e.g. Omada ER7212PC with built-in PoE ports). Omit entirely for a plain gateway. The engine counts ports from this block, so gateway_router_specs.lan_ports must be 0 whenever switch_specs is present (enforced below).").optional(),
 /**Present only when this gateway/router has an integrated controller (e.g. Omada ER7212PC). Omit entirely for a plain gateway.*/
-"controller_specs": z.object({
-/**hardware = standalone physical appliance; software = self-hosted install; cloud = vendor-hosted (typically licensed); integrated = built into another device (e.g. a router such as the Omada ER7212PC) and not separately purchasable.*/
-"controller_type": z.enum(["hardware","software","cloud","integrated"]).describe("hardware = standalone physical appliance; software = self-hosted install; cloud = vendor-hosted (typically licensed); integrated = built into another device (e.g. a router such as the Omada ER7212PC) and not separately purchasable."),
+"controller_specs": z.object({ "controller_type": z.literal("integrated"),
 /**Max access points this controller can manage.*/
 "max_managed_aps": z.number().int().gte(0).describe("Max access points this controller can manage."),
 /**Max switches this controller can manage.*/
-"max_managed_switches": z.number().int().gte(0).describe("Max switches this controller can manage."),
+"max_managed_switches": z.number().int().gte(0).describe("Max switches this controller can manage.").optional(),
 /**Max gateways/routers this controller can manage.*/
-"max_managed_gateways": z.number().int().gte(0).describe("Max gateways/routers this controller can manage."),
+"max_managed_gateways": z.number().int().gte(0).describe("Max gateways/routers this controller can manage.").optional(),
 /**Optional combined cap shared by access points and switches, for controllers whose vendor states one (e.g. 22 for the Omada ER7212PC's integrated controller). The engine checks aps + switches against this in addition to the per-type limits.*/
 "max_managed_aps_and_switches": z.number().int().gte(0).describe("Optional combined cap shared by access points and switches, for controllers whose vendor states one (e.g. 22 for the Omada ER7212PC's integrated controller). The engine checks aps + switches against this in addition to the per-type limits.").optional(), "max_managed_clients": z.number().int().gte(0).optional(),
 /**Ethernet ports on the appliance. Use 0 or omit for software/cloud controllers.*/
