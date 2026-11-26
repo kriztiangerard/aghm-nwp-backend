@@ -1,0 +1,85 @@
+[
+  {
+    "vendor_id": 4,
+    "category": "ap",
+    "product_line": "Wi-Fi 6 AX3000",
+    "capabilities": [
+      "ap"
+    ],
+    "sku": "RG-RAP2266",
+    "name": "Reyee RG-RAP2266 Wi-Fi 6 AX3000 Access Point",
+    "description": "Dual-band Wi-Fi 6 ceiling/wall access point with four spatial streams, 2974 Mbps aggregate advertised wireless data rate and cloud management.",
+    "price": null,
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "ap_specs": {
+      "wifi_standard": 6,
+      "max_concurrent_clients": 512,
+      "max_data_rate_mbps": 2974,
+      "supported_24ghz": true,
+      "supported_5ghz": true,
+      "supported_6ghz": false,
+      "max_power_draw_w": 18,
+      "poe_standard": "af",
+      "power_method": "IEEE 802.3af/at PoE or 12V DC adapter"
+    }
+  },
+  {
+    "vendor_id": 4,
+    "category": "ap",
+    "product_line": "Wi-Fi 7 BE3600",
+    "capabilities": [
+      "ap"
+    ],
+    "sku": "RG-RAP72",
+    "name": "Reyee RG-RAP72 Wi-Fi 7 BE3600 Access Point",
+    "description": "Dual-band Wi-Fi 7 ceiling/wall access point with four spatial streams, 3570 Mbps aggregate advertised wireless data rate and a 2.5 GbE uplink.",
+    "price": null,
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "ap_specs": {
+      "wifi_standard": 7,
+      "max_concurrent_clients": 511,
+      "max_data_rate_mbps": 3570,
+      "supported_24ghz": true,
+      "supported_5ghz": true,
+      "supported_6ghz": false,
+      "max_power_draw_w": 14,
+      "poe_standard": "af",
+      "power_method": "IEEE 802.3af/at PoE or 12V DC adapter"
+    }
+  },
+  {
+    "vendor_id": 4,
+    "category": "ap",
+    "product_line": "Wi-Fi 7 BE19000",
+    "capabilities": [
+      "ap"
+    ],
+    "sku": "RG-RAP73HD",
+    "name": "Reyee RG-RAP73HD Wi-Fi 7 BE19000 Access Point",
+    "description": "Tri-band Wi-Fi 7 high-density ceiling/wall access point with twelve spatial streams, 18668 Mbps aggregate advertised wireless data rate and 10 GbE connectivity.",
+    "price": null,
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "sunsetting",
+    "eos_date": "2026-06-03",
+    "eol_date": "2031-06-03",
+    "ap_specs": {
+      "wifi_standard": 7,
+      "max_concurrent_clients": 1024,
+      "max_data_rate_mbps": 18668,
+      "supported_24ghz": true,
+      "supported_5ghz": true,
+      "supported_6ghz": true,
+      "max_power_draw_w": 60,
+      "power_method": "PoE+/PoE++ or 48V DC adapter; verify PoE operating-mode requirements"
+    }
+  }
+]

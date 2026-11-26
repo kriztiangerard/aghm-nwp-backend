@@ -1,0 +1,58 @@
+[
+  {
+    "vendor_id": 4,
+    "category": "gateway_router",
+    "name": "600 Mbps Cloud Gateways",
+    "line_rank": 1,
+    "source_note": "Team-derived entry tier based on Ruijie Reyee RG-EG105G-V3 and RG-EG105G-P-V3 specifications, with 600 Mbps advertised gateway throughput. Not a manufacturer-published product-line hierarchy."
+  },
+  {
+    "vendor_id": 4,
+    "category": "gateway_router",
+    "name": "1.5 Gbps Cloud Gateways",
+    "line_rank": 2,
+    "source_note": "Team-derived midrange tier based on the RG-EG305GH-P-E's documented 1.5 Gbps gateway throughput and 350-client capacity. Not a manufacturer-published product-line hierarchy."
+  },
+  {
+    "vendor_id": 4,
+    "category": "gateway_router",
+    "name": "3 Gbps High-Performance Gateways",
+    "line_rank": 3,
+    "source_note": "Team-derived higher-performance tier based on the RG-EG710XS's documented 3 Gbps gateway throughput and 700-client capacity. Not a manufacturer-published product-line hierarchy."
+  },
+  {
+    "vendor_id": 4,
+    "category": "switch",
+    "name": "ES Smart Managed",
+    "line_rank": 1,
+    "source_note": "Team-derived tier grouping Reyee ES smart cloud-managed switches, including RG-ES216GC-V2 and RG-ES228GS-LP. PoE variants share the tier because PoE is a functional requirement rather than a universal performance ranking. Not a manufacturer-published hierarchy."
+  },
+  {
+    "vendor_id": 4,
+    "category": "switch",
+    "name": "NBS Layer 3 Managed",
+    "line_rank": 2,
+    "source_note": "Team-derived advanced switch tier based on RG-NBS5200-24GT4XS-P-V2, documented as a Layer 3 managed PoE switch with 10G SFP+ uplinks. Not a manufacturer-published hierarchy."
+  },
+  {
+    "vendor_id": 4,
+    "category": "ap",
+    "name": "Wi-Fi 6 AX3000",
+    "line_rank": 1,
+    "source_note": "Team-derived AP tier based on the RG-RAP2266 Wi-Fi 6 AX3000 class. Rankings consider wireless generation and advertised data rates, not guaranteed throughput."
+  },
+  {
+    "vendor_id": 4,
+    "category": "ap",
+    "name": "Wi-Fi 7 BE3600",
+    "line_rank": 2,
+    "source_note": "Team-derived AP tier based on the RG-RAP72 Wi-Fi 7 BE3600 class. Higher rank reflects newer wireless generation and advertised performance class."
+  },
+  {
+    "vendor_id": 4,
+    "category": "ap",
+    "name": "Wi-Fi 7 BE19000",
+    "line_rank": 3,
+    "source_note": "Team-derived higher-performance AP tier based on the RG-RAP73HD Wi-Fi 7 tri-radio BE19000 class. Classification reflects advertised wireless capabilities, not guaranteed real-world throughput."
+  }
+]

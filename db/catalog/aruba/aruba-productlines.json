@@ -1,0 +1,44 @@
+[
+  {
+    "vendor_id": 1,
+    "category": "gateway_router",
+    "name": "Secure Gateway",
+    "line_rank": 1,
+    "source_note": "HPE Instant On Secure Gateway series; only gateway line in the current Aruba catalog."
+  },
+  {
+    "vendor_id": 1,
+    "category": "switch",
+    "name": "1430",
+    "line_rank": 1,
+    "source_note": "HPE Instant On 1430 series; unmanaged entry-level switching."
+  },
+  {
+    "vendor_id": 1,
+    "category": "switch",
+    "name": "1830",
+    "line_rank": 2,
+    "source_note": "HPE Instant On 1830 series; smart-managed Layer 2 switching."
+  },
+  {
+    "vendor_id": 1,
+    "category": "ap",
+    "name": "Wi-Fi 5",
+    "line_rank": 1,
+    "source_note": "HPE Instant On 802.11ac access points; Wi-Fi 5 technology tier."
+  },
+  {
+    "vendor_id": 1,
+    "category": "ap",
+    "name": "Wi-Fi 6",
+    "line_rank": 2,
+    "source_note": "HPE Instant On 802.11ax access points; Wi-Fi 6 technology tier."
+  },
+  {
+    "vendor_id": 1,
+    "category": "ap",
+    "name": "Wi-Fi 6E",
+    "line_rank": 3,
+    "source_note": "HPE Instant On Wi-Fi 6E access points; additional 6 GHz band capability."
+  }
+]
