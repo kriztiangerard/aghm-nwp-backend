@@ -54,8 +54,45 @@ async function probeOutbound({
   }
 }
 
+class DatabaseUnavailableError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'DatabaseUnavailableError';
+  }
+}
+
+/**
+ * Proves the function can reach RDS (NWP-PRICE-010 AC1): one `SELECT 1` through the engine's pool. Needs no
+ * outbound internet, so it also passes with fck-nat stopped. Gives up after `timeoutMs` so an unreachable
+ * database fails fast instead of holding the Lambda until its own timeout. The connection details are never
+ * returned or logged; only the database name, which tells QA which database the function is using.
+ *
+ * @param {{ getPool?: () => Promise<{ query: Function }>, timeoutMs?: number }} [options]
+ * @returns {Promise<{ database: 'reachable', databaseName: string }>}
+ */
+async function probeDatabase({
+  getPool = () => require('./db').getPool(),
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+} = {}) {
+  let timer;
+  try {
+    const pool = await getPool();
+    const timeout = new Promise((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`no answer within ${timeoutMs} ms`)), timeoutMs);
+    });
+    const { rows } = await Promise.race([pool.query('SELECT current_database() AS name'), timeout]);
+    return { database: 'reachable', databaseName: rows[0].name };
+  } catch (error) {
+    throw new DatabaseUnavailableError(`The database could not be reached: ${error && error.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 module.exports = {
   probeOutbound,
+  probeDatabase,
   ProbeFailedError,
+  DatabaseUnavailableError,
   DEFAULT_PROBE_URL,
 };

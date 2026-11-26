@@ -187,6 +187,34 @@ export class AghmNwpStack extends cdk.Stack {
       'aghm-nwp/firecrawl',
     );
 
+    // Explicit role (AC4: read the two secrets and write its own logs). Without one, CDK attaches
+    // AWSLambdaBasicExecutionRole and AWSLambdaVPCAccessExecutionRole, which allow writing to every log
+    // group in the account. Logs: only this function's log group (it already exists, so no CreateLogGroup).
+    // Network interfaces: required for any Lambda in a VPC and only grantable on "*" (AWS does not support
+    // narrowing them); they let Lambda attach the function to its subnets, nothing more.
+    const priceUpdaterLogGroup = makeLogGroup('PriceUpdaterLogs');
+    const priceUpdaterRole = new iam.Role(this, 'PriceUpdaterRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      description: 'Price updater (NWP-PRICE-010): own logs, VPC network interfaces, Firecrawl and database secrets',
+    });
+    priceUpdaterRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'OwnLogGroupOnly',
+      actions: ['logs:CreateLogStream', 'logs:PutLogEvents'],
+      resources: [priceUpdaterLogGroup.logGroupArn],   // arn:...:log-group:<name>:* (its streams)
+    }));
+    priceUpdaterRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'VpcNetworkInterfaces',
+      actions: [
+        'ec2:CreateNetworkInterface',
+        'ec2:DescribeNetworkInterfaces',
+        'ec2:DescribeSubnets',
+        'ec2:DeleteNetworkInterface',
+        'ec2:AssignPrivateIpAddresses',
+        'ec2:UnassignPrivateIpAddresses',
+      ],
+      resources: ['*'],
+    }));
+
     const priceUpdaterFn = new lambdaNodejs.NodejsFunction(this, 'PriceUpdaterFunction', {
       ...vpcProps,
       entry: path.join(repositoryRoot, 'src', 'pricing', 'handler.js'),
@@ -200,10 +228,11 @@ export class AghmNwpStack extends cdk.Stack {
         FIRECRAWL_CONCURRENCY: '2',
         PRICE_MEDIAN_INCLUDE_STALE: 'false',
       },
-      logGroup: makeLogGroup('PriceUpdaterLogs'),
+      logGroup: priceUpdaterLogGroup,
+      role: priceUpdaterRole,
     });
-    databaseSecret.grantRead(priceUpdaterFn);
-    firecrawlSecret.grantRead(priceUpdaterFn);
+    databaseSecret.grantRead(priceUpdaterRole);
+    firecrawlSecret.grantRead(priceUpdaterRole);
 
 
     // 1a. BACKEND: API Gateway routes requests to the active engine handler.

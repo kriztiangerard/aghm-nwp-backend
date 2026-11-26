@@ -7,7 +7,7 @@ import { jsonSchemaToZod } from 'json-schema-to-zod'
 type JsonSchema = Record<string, unknown>
 
 const scriptDirectory = dirname(__filename)
-const repositoryRoot = resolve(scriptDirectory, '../..')
+const repositoryRoot = resolve(scriptDirectory, '..')
 const schemaPath = resolve(
   repositoryRoot,
   'db/catalog/schema/device-schemas.json'

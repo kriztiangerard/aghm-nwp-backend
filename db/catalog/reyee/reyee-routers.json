@@ -1,0 +1,124 @@
+[
+  {
+    "vendor_id": 4,
+    "sku": "RG-EG105G-V3",
+    "price": null,
+    "name": "Reyee RG-EG105G-V3",
+    "description": "Five-port cloud-managed gigabit gateway with 600 Mbps normal throughput and support for VPN and multi-WAN connectivity.",
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "category": "gateway_router",
+    "product_line": "600 Mbps Cloud Gateways",
+    "capabilities": [
+      "router",
+      "controller"
+    ],
+    "gateway_router_specs": {
+      "wan_ports": 1,
+      "lan_ports": 3,
+      "max_throughput_mbps": 600,
+      "vpn_supported": true
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 300
+    }
+  },
+  {
+    "vendor_id": 4,
+    "sku": "RG-EG105G-P-V3",
+    "price": null,
+    "name": "Reyee RG-EG105G-P-V3",
+    "description": "Five-port cloud-managed PoE gateway with 600 Mbps normal throughput, four PoE+ outputs and a 54 W PoE budget.",
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "category": "gateway_router",
+    "product_line": "600 Mbps Cloud Gateways",
+    "capabilities": [
+      "router",
+      "controller"
+    ],
+    "gateway_router_specs": {
+      "wan_ports": 1,
+      "lan_ports": 3,
+      "max_throughput_mbps": 600,
+      "vpn_supported": true
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 300
+    }
+  },
+  {
+    "vendor_id": 4,
+    "sku": "RG-EG305GH-P-E",
+    "price": null,
+    "name": "Reyee RG-EG305GH-P-E",
+    "description": "Five-port high-performance cloud-managed PoE gateway with 1500 Mbps throughput, four PoE outputs and support for 64 VPN tunnels.",
+    "is_rack_mountable": false,
+    "u_height": 0,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "category": "gateway_router",
+    "product_line": "1.5 Gbps Cloud Gateways",
+    "capabilities": [
+      "router",
+      "firewall",
+      "controller"
+    ],
+    "gateway_router_specs": {
+      "wan_ports": 1,
+      "lan_ports": 1,
+      "max_throughput_mbps": 1500,
+      "vpn_supported": true
+    },
+    "firewall_specs": {
+      "vpn_throughput_mbps": 170
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 500
+    }
+  },
+  {
+    "vendor_id": 4,
+    "sku": "RG-EG710XS",
+    "price": null,
+    "name": "Reyee RG-EG710XS",
+    "description": "Ten-port high-performance cloud-managed gateway with eight copper Ethernet ports, two 10GE SFP+ ports, 3000 Mbps normal throughput and support for 300 VPN tunnels.",
+    "is_rack_mountable": true,
+    "u_height": 1,
+    "lifecycle_status": "active",
+    "eos_date": null,
+    "eol_date": null,
+    "category": "gateway_router",
+    "product_line": "3 Gbps High-Performance Gateways",
+    "capabilities": [
+      "router",
+      "firewall",
+      "controller"
+    ],
+    "gateway_router_specs": {
+      "wan_ports": 1,
+      "lan_ports": 1,
+      "max_throughput_mbps": 3000,
+      "vpn_supported": true,
+      "sfp_ports": 2,
+      "sfp_form_factor": "SFP+"
+    },
+    "firewall_specs": {
+      "vpn_throughput_mbps": 1100
+    },
+    "controller_specs": {
+      "controller_type": "integrated",
+      "max_managed_aps": 800
+    }
+  }
+]
