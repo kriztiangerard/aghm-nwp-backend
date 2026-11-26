@@ -17,7 +17,8 @@
     "seed:reyee-productlines": "tsx scripts/insert-reyee-productlines.ts",
     "seed:reyee-devices": "tsx scripts/seed-reyee-devices.ts",
     "insert:grandstream-productlines": "tsx scripts/insert-grandstream-productlines.ts",
-    "seed:grandstream-devices": "tsx scripts/seed-grandstream-devices.ts"
+    "seed:grandstream-devices": "tsx scripts/seed-grandstream-devices.ts",
+    "seed:shoppable-sources": "tsx scripts/seed-shoppable-sources.ts"
   },
   "devDependencies": {
     "@swc/core": "^1.15.0",
