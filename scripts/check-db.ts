@@ -1,5 +1,7 @@
 import 'dotenv/config'
 import { Client } from 'pg'
+import fs from 'node:fs'
+import path from 'node:path'
 
 const requiredTables = [
   'vendor',
@@ -26,6 +28,14 @@ async function main() {
 
   const client = new Client({
     connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DB_SSL === 'true'
+      ? {
+          ca: fs.readFileSync(
+            path.resolve(process.cwd(), 'global-bundle.pem')
+          ).toString(),
+          rejectUnauthorized: true,
+        }
+      : false,
   })
 
   try {
