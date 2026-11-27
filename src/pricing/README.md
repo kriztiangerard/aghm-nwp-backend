@@ -50,7 +50,8 @@ Sources are distributor **listing pages**, one `pricing_source` row per page URL
 
 1. Apply `db/migrations/004_pricing_sync_schema.sql` (NWP-PRICE-009) if it isn't applied yet.
 2. Run `scripts/deactivate-replaced-sources.sql` to turn off retired URLs.
-3. Run `npx tsx scripts/seed-distributor-sources.ts`. It's safe to run again; existing rows are skipped.
+3. Run `npx tsx scripts/seed-distributor-sources.ts`. **Don't run it twice:** it doesn't skip sources that already exist, so a second run adds a copy of every source.
+4. Shoppable Business sources: `npm run seed:shoppable-sources` (add `-- --dry-run` first to see what it would do). It's safe to run again: it only adds pages that aren't already there. To add a search or more result pages, edit `searches` in `scripts/seed-shoppable-sources.ts`. Confirm the page parameter in a browser before setting `pages` above 1.
 
 A vendor whose listing spans several pages needs one source row per page URL (see Pagination below). Grandstream GWN Cloud has no scraped sources (no Philippine store lists it with prices), so its prices are entered manually.
 
@@ -236,9 +237,15 @@ Every product Firecrawl extracts from a listing page is normalized and validated
 - **VAT:** prices are stored as listed. Philippine prices are marketed VAT-inclusive, so nothing is added or removed (team decision, 2026-11-19).
 - **Currency:** PHP only. One peso marker is accepted, before or after the amount: `₱`, `PHP` or `P` (case-insensitive). Any other currency is rejected.
 - **Format:** plain digits or correctly grouped thousands separators (`1,234,567`), up to two decimal places. Surrounding and non-breaking spaces and full-width digits are handled.
-- **Never guessed:** ranges, zero, negative amounts, more than two decimals, European separators (`1.234,00`) and extra text (`₱1,234.00 VAT inclusive`, `Call for price`, `from ₱18,825.00`) are rejected. A range is never resolved to one end.
+- **Never guessed:** zero, negative amounts, more than two decimals, European separators (`1.234,00`) and extra text (`₱1,234.00 VAT inclusive`, `Call for price`, `from ₱18,825.00`) are rejected.
+- **Ranges:** a listing price shown as a range (`₱1,000 - ₱1,200`, usually a product with variants) stores the **higher** end (decision by G, 2026-11-26: the conservative figure for a budget estimate). Both ends must be valid PHP amounts, or the price is rejected. A lower bound alone (`from ₱18,825.00`) is still rejected. Manual prices (`pricing:set-manual`) never accept a range. `RANGE_EXAMPLES` in `price-formats.js` is the specification.
 - **Exact arithmetic:** amounts are integer centavos, so `₱1,234.00`, `PHP 1,234` and `1234` all become exactly `1234.00`.
-- **SKU match:** a product is matched to a device of the source's vendor when the SKUs are equal after normalization (trim, uppercase, collapse whitespace, full-width to ASCII). Hyphens and suffixes are kept, so `SG2008` never matches `SG2008P`.
+- **SKU match:** a product is matched to a device of the source's vendor in three steps:
+  1. **Exact,** after normalization (trim, uppercase, collapse whitespace, full-width to ASCII).
+  2. **Ignoring separators** (spaces, hyphens, underscores, dots, slashes): `U6-PRO` = `U6 Pro` = `u6pro`.
+  3. **Also ignoring a leading brand prefix** (`TL-`, `TP-Link`, `UBNT-`, `UniFi`, `RG-`, `Ruijie`, `Reyee`, `Cisco`, `HPE`, `Aruba`) on both sides: `TL-SG2008` finds `SG2008`, and `RAP2266` finds `RG-RAP2266`.
+
+  Steps 2 and 3 match only when exactly one catalog device fits. TP-Link reuses base model numbers (`SG3428XPP-M2` and `TL-SG3428XPP-M2` are different switches), so an ambiguous spelling is counted as unmatched, never guessed. Letters and digits are never dropped (`SG2008` never matches `SG2008P`), and region or version suffixes (`(UN)`, `-NA`, `V2`) aren't stripped.
 - **Same device listed twice:** kept once if the prices agree; rejected if they differ (the page does not say which applies).
 
 ### Results

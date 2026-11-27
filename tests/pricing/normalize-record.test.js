@@ -5,8 +5,7 @@
 const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  normalizeRecord, normalizeListing, normalizeSku, buildSkuIndex, NORMALIZE_REJECT_REASONS: R,
-} = require('../../src/pricing/normalize-record');
+  normalizeRecord, normalizeListing, normalizeSku, buildSkuIndex, NORMALIZE_REJECT_REASONS: R, matchSku } = require('../../src/pricing/normalize-record');
 
 const SOURCE = { sourceId: 7, vendorId: 2, distributorId: 3 };
 const RETRIEVED_AT = '2026-11-22T18:05:00.000Z';
@@ -89,7 +88,7 @@ describe('normalizeRecord: rejected products', () => {
     ['SKU not in the vendor catalog', { sku: 'ER7206', price: '3990' }, R.NO_SKU_MATCH],
     ['SKU with extra text', { sku: 'ER605 V2', price: '3990' }, R.NO_SKU_MATCH],
     ['no price', { sku: 'ER605' }, R.MISSING_FIELD],
-    ['price range', { sku: 'ER605', price: '3,500 - 3,990' }, R.INVALID_PRICE],
+    ['price range with an unusable end', { sku: 'ER605', price: '3,500 - Call for price' }, R.INVALID_PRICE],
     ['foreign currency', { sku: 'ER605', price: '$75' }, R.INVALID_PRICE],
     ['zero price', { sku: 'ER605', price: '₱0.00' }, R.INVALID_PRICE],
     ['text instead of price', { sku: 'ER605', price: 'Call for price' }, R.INVALID_PRICE],
@@ -216,5 +215,72 @@ describe('normalizeSku', () => {
 
   test('returns null when there is no usable SKU', () => {
     for (const raw of ['', '   ', undefined, {}]) assert.equal(normalizeSku(raw), null);
+  });
+});
+
+describe('matchSku: layered, never guessing (store spellings)', () => {
+  // Real catalog SKUs, including TP-Link's reused base number: two different switches.
+  const index = buildSkuIndex([
+    { deviceId: 1, sku: 'SG2008' },
+    { deviceId: 2, sku: 'SG2008P' },
+    { deviceId: 3, sku: 'U6-Pro' },
+    { deviceId: 4, sku: 'U7-Pro-XG' },
+    { deviceId: 5, sku: 'RG-RAP2266' },
+    { deviceId: 6, sku: 'SG3428XPP-M2' },      // Omada Access Pro
+    { deviceId: 7, sku: 'TL-SG3428XPP-M2' },   // JetStream, a different switch
+    { deviceId: 8, sku: 'EAP683 UR' },
+  ]);
+
+  test('exact matches still win', () => {
+    assert.equal(matchSku(index, 'u6-pro'), 3);
+    assert.equal(matchSku(index, 'TL-SG3428XPP-M2'), 7);
+    assert.equal(matchSku(index, 'SG3428XPP-M2'), 6);
+  });
+
+  test('separators are ignored: U6-PRO, U6 Pro, u6pro, U6_Pro', () => {
+    for (const sku of ['U6-PRO', 'U6 Pro', 'u6pro', 'U6_Pro', 'U6.Pro']) assert.equal(matchSku(index, sku), 3, sku);
+    assert.equal(matchSku(index, 'EAP683-UR'), 8);
+    assert.equal(matchSku(index, 'SG3428XPP M2'), 6);       // still the Access Pro, not the JetStream
+    assert.equal(matchSku(index, 'TL SG3428XPP M2'), 7);    // still the JetStream
+  });
+
+  test('a brand prefix is ignored on either side when only one device fits', () => {
+    assert.equal(matchSku(index, 'TL-SG2008'), 1);
+    assert.equal(matchSku(index, 'TP-Link SG2008P'), 2);
+    assert.equal(matchSku(index, 'RAP2266'), 5);
+    assert.equal(matchSku(index, 'Ruijie RG-RAP2266'), 5);
+    assert.equal(matchSku(index, 'UniFi U6 Pro'), 3);
+  });
+
+  test('an ambiguous model number never matches (TP-Link SG3428XPP-M2 vs TL-SG3428XPP-M2)', () => {
+    assert.equal(matchSku(index, 'TP-Link SG3428XPP-M2'), undefined);   // could be either switch
+  });
+
+  test('letters and digits are never dropped, and suffixes still matter', () => {
+    assert.equal(matchSku(index, 'SG2008-P'), 2);          // same letters: SG2008P
+    assert.equal(matchSku(index, 'U7-Pro'), undefined);    // not U7-Pro-XG
+    assert.equal(matchSku(index, 'U6-Pro-Max'), undefined);
+    assert.equal(matchSku(index, 'SG2008 (UN)'), undefined);   // region suffixes are not stripped
+    assert.equal(matchSku(index, ''), undefined);
+  });
+
+  test('normalizeListing uses it: a store listing in its own spelling is priced', () => {
+    const products = [
+      { sku: 'TL-SG2008', price: '₱2,190.00' },
+      { sku: 'U6 Pro', price: '₱9,450' },
+      { sku: 'TP-Link SG3428XPP-M2', price: '₱30,000' },
+    ];
+    const result = normalizeListing(products, SOURCE, index, RETRIEVED_AT);
+    assert.deepEqual(result.records.map((r) => [r.deviceId, r.price, r.pageSku]), [[1, '2190.00', 'TL-SG2008'], [3, '9450.00', 'U6 Pro']]);
+    assert.equal(result.unmatched, 1);   // the ambiguous one is skipped, not guessed
+  });
+});
+
+describe('normalizeRecord: price ranges on listings (decision by G, 2026-11-26)', () => {
+  test('a range stores its higher end', () => {
+    const result = normalizeRecord({ sku: 'ER605', price: '₱3,500 - ₱3,990' }, SOURCE, INDEX, RETRIEVED_AT);
+    assert.equal(result.ok, true);
+    assert.equal(result.record.price, '3990.00');
+    assert.equal(result.record.priceCentavos, 399000);
   });
 });

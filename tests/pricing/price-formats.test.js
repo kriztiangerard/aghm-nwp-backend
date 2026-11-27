@@ -4,7 +4,7 @@
 
 const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parsePrice, formatDecimal, PRICE_FORMAT_EXAMPLES } = require('../../src/pricing/price-formats');
+const { parsePrice, formatDecimal, PRICE_FORMAT_EXAMPLES, RANGE_EXAMPLES } = require('../../src/pricing/price-formats');
 
 describe('parsePrice: reference list', () => {
   for (const { raw, decimal } of PRICE_FORMAT_EXAMPLES.accepted) {
@@ -40,7 +40,7 @@ describe('parsePrice: story checks', () => {
     assert.equal(parsePrice('$1,234').ok, false);
   });
 
-  test('a range is never resolved to one of its ends', () => {
+  test('by default a range is never resolved to one of its ends (manual prices)', () => {
     const result = parsePrice('₱1,000 - ₱1,200');
 
     assert.equal(result.ok, false);
@@ -78,5 +78,28 @@ describe('formatDecimal', () => {
     assert.equal(formatDecimal(123400), '1234.00');
     assert.equal(formatDecimal(5), '0.05');
     assert.equal(formatDecimal(123450), '1234.50');
+  });
+});
+
+describe('price ranges with { rangeUpperBound: true } (scraped listings)', () => {
+  for (const example of RANGE_EXAMPLES.accepted) {
+    test(`accepts ${JSON.stringify(example.raw)} as ${example.decimal}${example.note ? ` (${example.note})` : ''}`, () => {
+      const result = parsePrice(example.raw, { rangeUpperBound: true });
+      assert.equal(result.ok, true, result.detail);
+      assert.equal(result.decimal, example.decimal);
+      assert.equal(result.fromRange, true);
+    });
+  }
+
+  for (const example of RANGE_EXAMPLES.rejected) {
+    test(`rejects ${JSON.stringify(example.raw)}: ${example.why}`, () => {
+      assert.equal(parsePrice(example.raw, { rangeUpperBound: true }).ok, false);
+    });
+  }
+
+  test('keeps the lower end for logs, and single amounts are unchanged', () => {
+    assert.equal(parsePrice('₱1,000 - ₱1,200', { rangeUpperBound: true }).rangeLowDecimal, '1000.00');
+    const single = parsePrice('₱1,234.00', { rangeUpperBound: true });
+    assert.deepEqual(single, { ok: true, centavos: 123400, decimal: '1234.00' });
   });
 });
