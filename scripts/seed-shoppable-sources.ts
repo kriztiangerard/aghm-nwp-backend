@@ -21,6 +21,10 @@
 // When a total grows past a multiple of 25, raise `results` and run the script again: it adds only the
 // new pages. Two searches of the same vendor may list the same product; the updater stores it once when
 // the prices agree, and rejects it for that run when they differ (collect.js, combinePages).
+//
+// A product page can be a source too (`productUrl`), for a model that no search finds cheaply. It is one
+// page with one product; the extractor reads the model from the page's MPN/model field. Retired URLs
+// (`retiredUrls`) are switched to inactive, not deleted, so their pricing history stays.
 
 import { pool } from "../src/db/client";
 
@@ -29,16 +33,28 @@ const SEARCH_URL = "https://business.shoppable.ph/search";
 const PAGE_SIZE = 25;
 const OFFSET_PARAM = "skip";
 
-type ShoppableSearch = {
-  vendorName: string; // must match vendor.name exactly
-  query: string;      // the search text, as in ?q=
-  results: number;    // total results the search reports (counted 2026-11-27)
-};
+type ShoppableSearch =
+  | {
+      vendorName: string; // must match vendor.name exactly
+      query: string;      // the search text, as in ?q=, exactly as typed when counting
+      results: number;    // total results the search reports (counted 2026-11-27)
+    }
+  | {
+      vendorName: string;
+      productUrl: string; // a single product page
+    };
 
 const searches: ShoppableSearch[] = [
   { vendorName: "TP-Link Omada", query: "Omada", results: 27 },
-  // 227 results is 10 pages (50 credits a run) for a 10-device Ruijie catalog; most results will not match.
-  { vendorName: "Ruijie", query: "Reyee", results: 227 },
+  // Ruijie: "Reyee" returned 227 results (10 pages) for a 10-device catalog, so it is searched by family
+  // and model instead. RG-ES228GS-LP is not on Shoppable (2026-11-27).
+  { vendorName: "Ruijie", query: "RAP", results: 29 },     // RG-RAP2266, RG-RAP72, RG-RAP73HD
+  { vendorName: "Ruijie", query: "EG", results: 16 },      // RG-EG105G-V3, RG-EG105G-P-V3, RG-EG305GH-P-E, RG-EG710XS
+  { vendorName: "Ruijie", query: "NBS5200", results: 6 },  // RG-NBS5200-24GT4XS-P-V2
+  {                                                        // RG-ES216GC-V2 (MPN on the page)
+    vendorName: "Ruijie",
+    productUrl: "https://business.shoppable.ph/reyee-b.778/reyee-16-port-gigabit-smart-cloud-managed-switch-or-rack-mount-p.77475",
+  },
   { vendorName: "Ubiquiti UniFi", query: "Ubiquiti", results: 21 },
   // "GWN" includes 2 non-Grandstream products (counted as unmatched); "Grandstream" lists some products
   // "GWN" does not, so both are kept.
@@ -51,7 +67,18 @@ const searches: ShoppableSearch[] = [
   // { vendorName: "Cisco Business", query: "Cisco", results: 0 },
 ];
 
+// Pages registered by earlier versions of this script that are no longer wanted.
+const retiredUrls: string[] = [
+  `${SEARCH_URL}?q=Reyee`, // replaced by the Ruijie family and model searches above
+];
+
 function pageUrls(search: ShoppableSearch): string[] {
+  if ("productUrl" in search) {
+    if (!search.productUrl.startsWith("https://business.shoppable.ph/")) {
+      throw new Error(`productUrl must be a business.shoppable.ph page (${search.vendorName}).`);
+    }
+    return [search.productUrl];
+  }
   if (!Number.isInteger(search.results) || search.results < 1) {
     throw new Error(`results must be a positive integer (${search.vendorName}, "${search.query}").`);
   }
@@ -131,11 +158,31 @@ async function main(): Promise<void> {
       }
     }
 
+    let retired = 0;
+    if (distributorId !== null) {
+      for (const url of retiredUrls) {
+        const { rows: active } = await client.query(
+          `SELECT source_id FROM pricing_source
+            WHERE distributor_id = $1 AND source_url = $2 AND is_active
+            ORDER BY source_id`,
+          [distributorId, url],
+        );
+        for (const row of active) {
+          if (!dryRun) {
+            await client.query("UPDATE pricing_source SET is_active = FALSE WHERE source_id = $1", [row.source_id]);
+          }
+          summary.push({ vendor: "(retired)", url, result: `${dryRun ? "would deactivate" : "deactivated"} (id ${row.source_id})` });
+          retired += 1;
+        }
+      }
+    }
+
     await client.query(dryRun ? "ROLLBACK" : "COMMIT");
     console.table(summary);
 
     const newPages = summary.filter((row) => row.result.startsWith("inserted") || row.result === "would insert").length;
-    console.log(`${newPages} new page(s): about ${newPages * 5} more Firecrawl credits per weekly run, ${Math.round(newPages * 5 * 4.35)} per month.`);
+    const change = newPages - retired;
+    console.log(`${newPages} new page(s), ${retired} retired: ${change >= 0 ? "about" : "saves about"} ${Math.abs(change) * 5} Firecrawl credits per weekly run, ${Math.round(Math.abs(change) * 5 * 4.35)} per month.`);
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;
