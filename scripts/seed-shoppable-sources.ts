@@ -15,39 +15,49 @@
 // distributor is created if it is missing.
 //
 // Pagination: the scraper reads exactly the URL it is given, so every results page needs its own row.
-// Set `pages` per search once the real page count is known; page N is the search URL plus
-// `&${PAGE_PARAM}=N`. Confirm the parameter name in a browser (click "next" and read the address bar)
-// before raising any `pages` above 1. Each page costs 5 Firecrawl credits per weekly run.
+// Shoppable shows 25 results per page and pages with an offset: page 1 is the plain search URL, then
+// &skip=25, &skip=50, ... (checked in a browser by G, 2026-11-27). Set `results` to the total the search
+// reports; the script registers ceil(results / 25) pages. Each page costs 5 Firecrawl credits per weekly run.
+// When a total grows past a multiple of 25, raise `results` and run the script again: it adds only the
+// new pages. Two searches of the same vendor may list the same product; the updater stores it once when
+// the prices agree, and rejects it for that run when they differ (collect.js, combinePages).
 
 import { pool } from "../src/db/client";
 
 const DISTRIBUTOR_NAME = "Shoppable Business";
 const SEARCH_URL = "https://business.shoppable.ph/search";
-const PAGE_PARAM = "page"; // confirm in a browser before using pages > 1
+const PAGE_SIZE = 25;
+const OFFSET_PARAM = "skip";
 
 type ShoppableSearch = {
   vendorName: string; // must match vendor.name exactly
   query: string;      // the search text, as in ?q=
-  pages: number;      // results pages to register (1 = the first page only)
+  results: number;    // total results the search reports (counted 2026-11-27)
 };
 
 const searches: ShoppableSearch[] = [
-  { vendorName: "TP-Link Omada", query: "Omada", pages: 1 },
-  { vendorName: "Ruijie", query: "Reyee", pages: 1 },
-  { vendorName: "Ubiquiti UniFi", query: "Ubiquiti", pages: 1 },
+  { vendorName: "TP-Link Omada", query: "Omada", results: 27 },
+  // 227 results is 10 pages (50 credits a run) for a 10-device Ruijie catalog; most results will not match.
+  { vendorName: "Ruijie", query: "Reyee", results: 227 },
+  { vendorName: "Ubiquiti UniFi", query: "Ubiquiti", results: 21 },
+  // "GWN" includes 2 non-Grandstream products (counted as unmatched); "Grandstream" lists some products
+  // "GWN" does not, so both are kept.
+  { vendorName: "Grandstream GWN Cloud", query: "GWN", results: 21 },
+  { vendorName: "Grandstream GWN Cloud", query: "Grandstream", results: 20 },
   // "HPE" also returns servers and storage; they are only counted as unmatched, but every page costs credits.
-  { vendorName: "HPE Aruba Instant On", query: "HPE", pages: 1 },
+  // Total not counted yet: one page until it is.
+  { vendorName: "HPE Aruba Instant On", query: "HPE", results: 1 },
   // More searches go here, for example:
-  // { vendorName: "Cisco Business", query: "Cisco Business", pages: 1 },
+  // { vendorName: "Cisco Business", query: "Cisco", results: 0 },
 ];
 
 function pageUrls(search: ShoppableSearch): string[] {
-  if (!Number.isInteger(search.pages) || search.pages < 1) {
-    throw new Error(`pages must be a positive integer (${search.vendorName}, "${search.query}").`);
+  if (!Number.isInteger(search.results) || search.results < 1) {
+    throw new Error(`results must be a positive integer (${search.vendorName}, "${search.query}").`);
   }
   const first = `${SEARCH_URL}?q=${encodeURIComponent(search.query)}`;
   const urls = [first];
-  for (let page = 2; page <= search.pages; page += 1) urls.push(`${first}&${PAGE_PARAM}=${page}`);
+  for (let skip = PAGE_SIZE; skip < search.results; skip += PAGE_SIZE) urls.push(`${first}&${OFFSET_PARAM}=${skip}`);
   return urls;
 }
 
