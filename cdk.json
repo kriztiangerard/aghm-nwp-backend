@@ -18,7 +18,7 @@
   },
   "context": {
     "fckNatInstanceId": "i-0ec096bba0361beeb",
-    "priceDatabaseSecretName": "aghm/database-qa",
+    "priceDatabaseSecretName": "aghm-nwp/database",
     "@aws-cdk-containers/ecs-service-extensions:enableDefaultLogDriver": true,
     "@aws-cdk/aws-apigateway:authorizerChangeDeploymentLogicalId": true,
     "@aws-cdk/aws-apigateway:disableCloudWatchRole": true,

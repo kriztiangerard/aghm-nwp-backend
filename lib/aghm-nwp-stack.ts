@@ -55,7 +55,7 @@ export class AghmNwpStack extends cdk.Stack {
     const databaseSecret = secretsmanager.Secret.fromSecretNameV2(
       this,
       'EngineDatabaseSecret',
-      'aghm/database-qa', // change to aghm/database-qa when testing, aghm-nwp/database when deploying to production
+      'aghm-nwp/database', // change to aghm/database-qa when testing, aghm-nwp/database when deploying to production
     );
 
     const makeLogGroup = (id: string) =>
