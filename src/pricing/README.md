@@ -8,7 +8,8 @@ Tests are in `tests/pricing/` and run with `node --test tests/pricing/*.test.js`
 
 | File | Story | Purpose |
 | --- | --- | --- |
-| `handler.js` | 010 | Lambda entry point. Dispatches on `event.action`: `probe`, `plan`, `process`, `markBatchFailed`, `finalize`. Actions not built yet throw `NotImplementedError` naming their story. |
+| `handler.js` | 010, 011 | Lambda entry point. Dispatches on `event.action`: `probe`, `plan`, `process`, `markBatchFailed`, `finalize`. |
+| `workflow.js` | 011 | The weekly workflow's own steps: `planRun()`, `markBatchFailed()`, `finalizeRun()`. |
 | `collect.js` | 002, 004 | `processSourceBatch()`: the `process` action's collection step. Scrapes one batch (with retry and failure isolation), combines its pages, stores found prices, returns a summary. |
 | `outcome.js` | 004 | `recordBatchOutcome()` (one `update_log` row per device), `attributeOutcomes()`, `loadTrackedRows()`, `getRunResult()`. |
 | `pricing-state.js` | 005, 006 | `markSyncFailure()` (stale, failure count + 1; never inserts, deletes or changes the price), `markSyncSuccess()` (not stale, count 0), `evaluateManualReview()`. |
@@ -65,7 +66,7 @@ A vendor whose listing spans several pages needs one source row per page URL (se
 
 Those subnets have no direct internet route; their route table sends `0.0.0.0/0` to the **fck-nat** instance, which is normally stopped. So:
 
-- **Firecrawl** is reachable only while fck-nat is running. The weekly workflow starts it before scraping and stops it afterwards.
+- **Firecrawl** is reachable only while fck-nat is running. The weekly workflow (NWP-PRICE-011) starts it before scraping and stops it afterwards, if it was stopped.
 - **Secrets Manager** is reachable through fck-nat, or through a Secrets Manager VPC endpoint if the VPC has one. Key reads time out after a few seconds instead of hanging.
 
 ### Check after deploying (fck-nat running)
@@ -183,6 +184,48 @@ Staleness is stored per `pricing` row, so per device and distributor.
 - **Written:** `UPDATE device SET price, price_updated_at` with `price_updated_at` set to the run time (`updatedAt`; finalize, NWP-PRICE-011, passes `runAt`). `pricing` is never changed here.
 - **Called by:** `npm run pricing:set-manual` after a manual price, and finalize for every device in the run: `refreshDeviceMedians(client, deviceIds, { includeStale, updatedAt })`, which returns `{ updated: [{ deviceId, price, prices }], unchanged: [deviceId] }`.
 - **Provenance:** unchanged. The engine still reports `price_source: 'manual'` for any device with a manual row (`price-provenance.js`, NWP-ENGINE-006).
+
+## Weekly workflow (NWP-PRICE-011)
+
+The `PriceSync` Standard state machine (`lib/price-sync-workflow.ts`) runs every Sunday at 02:00 Asia/Manila (EventBridge Scheduler). Every step invokes this function:
+
+| Step | Event | Returns |
+| --- | --- | --- |
+| Probe | `{ action: "probe" }` | Retried on `ProbeFailedError` while fck-nat comes up. |
+| Plan | `{ action: "plan", runAt }` with `runAt` = `$$.Execution.StartTime` | `{ runAt, batchCount, sourceCount, batches }`: one batch per vendor × distributor, sorted, each with the same `runAt`. |
+| Batches (Map) | `{ action: "process", runAt, vendorId, distributorId, sources }` | The batch summary (Price collection, above). The Map runs `FIRECRAWL_PLAN_BROWSERS ÷ FIRECRAWL_PAGES_PER_BATCH` batches at once (`lib/aghm-nwp-stack.ts`). |
+| Batch failed | `{ action: "markBatchFailed", batch, error: { Error, Cause } }` | `{ recorded, byStatus, alreadyRecorded }` |
+| Finalize | `{ action: "finalize", runAt, stop }` | The run-summary line (below). |
+
+- **A batch that fails as a whole** (Lambda timeout, crash; the Map item's Catch) goes to `markBatchFailed()`. It uses NWP-PRICE-004's attribution: the distributor's synchronized rows for the vendor's devices last priced from one of the batch's pages.
+  - Devices with no `update_log` row in this run are recorded as `unexpected_error` ("Batch failed as a whole (…)") and marked failed (`markSyncFailure()`: stale, count + 1).
+  - A device whose price was already stored in this run (`last_updated` at or after `runAt`, not stale) is recorded as `success` instead. Prices are stored only after every page is read and combined, so it is correct.
+  - Devices already recorded in this run are left alone, so running it twice is safe.
+  - A timed-out batch is not retried, so its Firecrawl credits are not spent twice.
+- **An account-level stop:** when a batch returns `stoppedBy`, that Map item ends in the `PriceSync.AccountLevelStop` Fail state. That stops the Map, so the remaining batches are skipped. Batches already running finish on their own. The Map's Catch passes the stop to finalize as `stop: { Error, Cause }`, where Cause is the JSON of `stoppedBy`.
+- **Finalize** takes its devices from `update_log` (`devicesInRun(runAt)`), not from the batch summaries. Every device a batch reported has a row there, and the summaries are dropped from the workflow state to stay under the 256 KB limit. In one transaction it runs:
+  1. `refreshDeviceMedians(…, { includeStale, updatedAt: runAt })` (008);
+  2. `evaluateManualReview()` (006);
+  3. `buildRunSummary()` (004 and 006).
+
+  It logs one line:
+
+  ```json
+  { "source": "price-updater", "event": "run-summary", "runAt": "…", "successful": true, "rows": 52,
+    "byStatus": { "success": 47, "blocked": 5 }, "devicesNeedingReview": 0,
+    "devices": 30, "mediansUpdated": 28, "mediansUnchanged": 2, "flaggedInRun": 0, "stoppedBy": null,
+    "unrecordedDevices": 0, "unrecorded": [] }
+  ```
+- **Unrecorded outcomes (AC5):** finalize also lists, under `unrecorded`, devices last priced from an active source that have no `update_log` row for the run. There's one entry per vendor × distributor, which is one batch. If `stoppedBy` isn't set, this means a batch's failure was never recorded (for example, `markBatchFailed` itself failed). An `outcomes-missing` error line is logged, and the execution fails. The root README has the recovery steps.
+- **The execution fails** when any step fails (after stopping fck-nat, if it started it), when `successful` is false (`PriceSync.NoPriceCollected`), or when outcomes are missing without an account-level stop (`PriceSync.OutcomesMissing`).
+
+## Timestamps
+
+Every timestamp the Price updater writes (`pricing.last_updated`, `update_log.run_at`, `device.price_updated_at`) is stored as **UTC**.
+
+- The columns are `TIMESTAMP` without a time zone (ERD), so they keep whatever wall-clock time they're given.
+- The code therefore always sends UTC ISO strings (`toISOString()`), never JavaScript `Date` objects. node-pg would send a `Date` in the machine's local time, so a run or a `pricing:set-manual` from a PH-time laptop would store PH time, while the Lambda stores UTC.
+- Read them as UTC. In PH time, a run at Sunday 02:00 shows as Saturday 18:00.
 
 ## Price normalization (NWP-PRICE-003)
 

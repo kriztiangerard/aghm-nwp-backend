@@ -100,6 +100,8 @@ The deployed API URL is shown in the stack outputs. Provide it to the frontend a
 
 Review the `cdk diff` output before every deploy, and stop if resources you did not intend to change are shown as replaced.
 
+The weekly price sync (NWP-PRICE-011) is deployed only when `fckNatInstanceId` is set in `cdk.json` (see "Price Updater: Weekly Sync"). Without it, `cdk synth` prints a warning and the rest of the stack deploys as usual.
+
 ### Data
 Deploying does not seed the database. Run migrations and `npm run seed:devices` as a separate step after the first deploy and after catalog changes. Hardware prices are refreshed by the scheduled price updater, and device lifecycle status is verified manually against vendor bulletins.
 
@@ -153,11 +155,142 @@ Prints the result and the number of products extracted; exits 0 on success. Each
 
 ### Credits and limits (weekly job)
 
-A JSON-format scrape costs 5 credits per page (1 base + 4 for JSON) at the time of writing; cached results are charged in full. Monthly estimate: `listing pages (including extra pagination pages) × 5 × 4.35 weekly runs`. Fill in the plan's monthly credits and concurrent-request limit from the Firecrawl dashboard; the concurrency sets `FIRECRAWL_CONCURRENCY` (NWP-PRICE-002) and the workflow's Map concurrency (NWP-PRICE-011).
+**Project limits (confirmed):** 1,000 Firecrawl credits per month (the allowance refreshes monthly), and 2 concurrent requests.
+
+**Cost per page:** a JSON-format scrape costs 5 credits (1 base + 4 for JSON) at the time of writing. Cached results are charged in full.
+
+**Weekly volume:** `scripts/seed-distributor-sources.ts` registers **21 active listing pages**. That's 21 × 5 = **105 credits per weekly run**, and about **457 credits per month** (× 4.35 weekly runs).
+
+| Vendor | Active pages | Distributors |
+| --- | --- | --- |
+| TP-Link Omada | 6 (includes the Shopee demo source) | 4 |
+| Cisco Business | 5 | 5 |
+| Ubiquiti UniFi | 4 | 4 |
+| Ruijie | 4 | 4 |
+| HPE Aruba Instant On | 2 | 1 |
+
+**Pagination:** each extra page of a listing needs its own source row (`?page=2`, …) and adds 5 credits per run (about 22 per month).
+- Wired Systems' Omada collection shows 20 of 32 products on its first page, so it needs a `?page=2` row.
+- XBS Asia's Cisco tag page should be checked the same way.
+
+With two extra pages, a run is 115 credits, about 500 per month.
+
+**Against the limit:** the weekly job uses about half of the 1,000 monthly credits (about 457, or 500 with the two extra pages). Manual runs (`pricing:smoke`, QA batches, a manual workflow execution) spend from the same allowance. A full manual run costs the same as a weekly run.
+
+**Duplicates:** `pricing_source` rows that were seeded more than once are scraped and charged once per copy. Check for duplicates before a run (`SELECT vendor_id, distributor_id, source_url, count(*) FROM pricing_source GROUP BY 1, 2, 3 HAVING count(*) > 1;`).
+
+**Concurrency:** the two limits are constants at the top of `lib/aghm-nwp-stack.ts`:
+- `FIRECRAWL_PAGES_PER_BATCH = 2` (the function's `FIRECRAWL_CONCURRENCY`, NWP-PRICE-002);
+- `FIRECRAWL_PLAN_BROWSERS = 2` (the plan's 2 concurrent requests).
+
+The workflow runs `browsers ÷ pages per batch` = 1 batch at a time (NWP-PRICE-011), so at most 2 requests are ever in flight. Raise `FIRECRAWL_PLAN_BROWSERS` only after upgrading the plan.
 
 ### Tests
 
 Pricing tests use `node:test` and run in CI with `node --test tests/pricing/*.test.js`.
+
+## Price Updater: Weekly Sync
+
+Every **Sunday at 02:00 (Asia/Manila)**, EventBridge Scheduler starts the `PriceSync` Standard state machine (`lib/price-sync-workflow.ts`, NWP-PRICE-011):
+
+1. **fck-nat:** if the instance is stopped, the workflow starts it and waits until it is running (up to 10 minutes). If it was already running, it is left running at the end.
+2. **Probe:** checks outbound access and the Firecrawl key, retried for about 6 minutes while fck-nat comes up.
+3. **Plan:** groups the active `pricing_source` rows into vendor × distributor batches. Every batch shares one `runAt`, the execution's start time.
+4. **Batches:** one `process` call per batch (NWP-PRICE-002/004). A batch that fails as a whole (for example a Lambda timeout) is recorded as `unexpected_error` and the others go on. An account-level error (`auth_error`, `quota_exceeded`, `network_error`) skips the remaining batches.
+5. **Finalize:** recalculates device medians, evaluates manual review, and logs one `run-summary` line.
+6. **Stop fck-nat** if this execution started it, also when any step failed.
+
+The execution ends **Failed** when a step failed, when no price was collected at all (`PriceSync.NoPriceCollected`), or when some devices' outcomes weren't recorded (`PriceSync.OutcomesMissing`, see Recovery), so a broken run is visible in the Step Functions console.
+
+### Setup (once)
+
+Put the fck-nat instance id in `cdk.json`, then deploy:
+
+```json
+"context": {
+  "fckNatInstanceId": "i-0123456789abcdef0",
+```
+
+You can also pass it for one deploy with `npx cdk deploy -c fckNatInstanceId=i-...`. The state machine may only start and stop that one instance.
+
+### Writing to a QA database instead of production
+
+By default, the Price updater writes to the engine's database (secret `aghm-nwp/database`). For QA runs, point **only the Price updater** at another database:
+
+1. **Create a secret holding the QA database's connection URL,** in the same plain-URL form as `aghm-nwp/database`. Put the URL in a file, create the secret, then delete the file:
+   ```bash
+   aws secretsmanager create-secret --name aghm-nwp/database-qa --secret-string file://qa-url.txt
+   rm qa-url.txt
+   ```
+2. **Set `"priceDatabaseSecretName": "aghm-nwp/database-qa"`** in `cdk.json` (or pass `-c priceDatabaseSecretName=aghm-nwp/database-qa`), then run `npx cdk diff` and `npx cdk deploy`. The synth prints a warning while the override is set.
+3. **Before any run,** invoke `{"action":"probe"}`. Its `databaseName` must be the QA database.
+4. **After QA,** clear the value (`""`) and redeploy, so the weekly runs write to production again. Probe should then show the production database's name.
+
+The engine always keeps its own secret; this setting never changes what the API reads.
+
+### Run it now
+
+```bash
+aws stepfunctions start-execution --state-machine-arn <PriceSyncStateMachineArn output> --input '{}'
+```
+
+Then check:
+
+- **Step Functions console:** the execution graph. A failed run shows the error and cause.
+- **`update_log`:** one row per device per distributor, all with the execution's start time as `run_at`.
+- **CloudWatch** (Price updater log group): one line per page (`"event":"page"`), and one `"event":"run-summary"` line with `successful`, `byStatus`, `mediansUpdated`, `devicesNeedingReview` and `stoppedBy`.
+- **EC2 console:** fck-nat is stopped again (if it was stopped before the run).
+
+Don't stop an execution by hand while it runs, and keep runs under the state machine's 6-hour timeout: neither runs the cleanup, so fck-nat would stay on (see Recovery below).
+
+### Recovery
+
+#### fck-nat left running (AC8)
+
+The workflow stops fck-nat on every failure path, but AWS gives it no chance to clean up in two cases: the 6-hour execution timeout, and **Stop execution** in the console. In both, fck-nat stays on until someone stops it. Nothing breaks, but the instance keeps running and billing. The team accepted this limit (decision by G, 2026-11-26), so recovery is by hand:
+
+1. **Spot it.**
+   - In the Step Functions console, the execution's status is **Timed out** or **Aborted**, not Failed or Succeeded.
+   - In the EC2 console, the fck-nat instance is still **Running** after the run.
+2. **Decide whether to stop it.** Stop it only if the workflow started it: it was stopped before the run. Open the execution's history and look for a `StartNat` step:
+   - **`StartNat` is there:** this run turned fck-nat on, so stop it.
+   - **No `StartNat`:** fck-nat was already running when the run began (someone needed it), so leave it on.
+3. **Make sure no other execution is running** (Step Functions console, **Running** filter). A run in progress needs fck-nat.
+4. **Stop it:** EC2 console → the fck-nat instance → **Instance state → Stop instance**, or:
+   ```bash
+   aws ec2 stop-instances --instance-ids <fckNatInstanceId from cdk.json>
+   ```
+5. **Prices from that run:** batches that finished before the timeout or stop are stored and recorded. Finalize did not run, so medians and the manual-review flags weren't updated. Run finalize for that run by hand (next section, step 3), or let next Sunday's run catch up.
+
+#### Outcomes missing (AC5)
+
+The execution ends **Failed** with `PriceSync.OutcomesMissing` when some devices have no `update_log` row for the run. Usually a batch failed and then `markBatchFailed` failed too, so that batch's failures were never recorded (no stale flag, no failure count). The run-summary log line lists them under `unrecorded`, one entry per batch, and an `"event":"outcomes-missing"` error line follows it:
+
+```json
+"unrecordedDevices": 2,
+"unrecorded": [{ "vendorId": 3, "distributorId": 7, "devices": 2, "deviceIds": [21, 22] }]
+```
+
+After an account-level stop (`stoppedBy` set), the skipped batches are listed here too, but that's expected: the execution doesn't fail for it, and next week's run covers them.
+
+To recover, using the run's `runAt` from the summary line:
+
+1. **Get the batch's sources** (vendor and distributor from the `unrecorded` entry):
+   ```sql
+   SELECT source_id, source_url FROM pricing_source
+    WHERE is_active AND vendor_id = <vendorId> AND distributor_id = <distributorId> ORDER BY source_id;
+   ```
+2. **Record the failures** for that batch. Invoke the Price updater with:
+   ```json
+   { "action": "markBatchFailed",
+     "batch": { "runAt": "<runAt>", "vendorId": <vendorId>, "distributorId": <distributorId>,
+                "sources": [{ "sourceId": <id>, "sourceUrl": "<url>" }] },
+     "error": { "Error": "ManualRecovery", "Cause": "markBatchFailed failed during the run; recorded by hand" } }
+   ```
+   Running it twice is safe: devices already recorded are skipped.
+3. **Finalize again:** `{ "action": "finalize", "runAt": "<runAt>", "stop": null }`. This is also safe to repeat. The new summary line should show `"unrecordedDevices": 0`.
+
+Invoke from the CLI with `aws lambda invoke --function-name <PriceUpdaterFunctionName output> --payload fileb://event.json out.json`. Put the JSON in `event.json`.
 
 ## Price Updater: Manual Review
 
