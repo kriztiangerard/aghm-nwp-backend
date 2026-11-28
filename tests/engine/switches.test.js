@@ -386,7 +386,7 @@ test('calculates the smallest quantity when one switch lacks enough total ports'
     requiredPoePorts: 10,
     requiredPoeBudgetW: 200,
     requiredPoeStandard: 'at',
-  }), 2);
+  }), 3); // 24 copper ports each; the 4 SFP ports are for uplinks only
 });
 
 test('calculates quantity from the PoE port count when that is the limiting capacity', () => {

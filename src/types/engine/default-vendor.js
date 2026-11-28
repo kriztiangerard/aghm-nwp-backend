@@ -71,6 +71,39 @@ function compareCandidates(a, b, vendorOrder) {
   return a.index - b.index;
 }
 
+const TIER_NAMES = Object.freeze({ 1: 'budget', 2: 'mid', 3: 'higher' });
+const HIGHEST_TIER = 3;
+const MID_TIER = 2;
+
+// NWP-ENGINE-019 AC11: the budget band sets the tier; downtime may raise it by one; no IT support caps it
+// at mid. Returns null (no tier preference) when the budget band is unknown.
+function getPreferredTier(input) {
+  const fromBudget = params.PREFERRED_TIER_BY_BUDGET_BAND[input.monthlyBudgetBand];
+  if (fromBudget === undefined) return null;
+
+  let tier = fromBudget;
+  if (input.downtime === 'everyMinute') tier = Math.min(HIGHEST_TIER, tier + 1);
+  if (input.itSupport === 'none') tier = Math.min(MID_TIER, tier);
+  return tier;
+}
+
+const tierOf = (vendorName) => params.VENDOR_PRICE_TIERS[vendorName] ?? null;
+
+// The preferred tier if it has a candidate, else the nearest tier (cheaper first on a tie). Vendors with no
+// tier are used only when no candidate has one.
+function filterByTier(candidates, preferredTier) {
+  if (preferredTier === null) return { candidates, tier: null };
+
+  const tiers = [...new Set(candidates.map(({ plan }) => tierOf(plan.vendor)).filter((tier) => tier !== null))]
+    .sort((a, b) => Math.abs(a - preferredTier) - Math.abs(b - preferredTier) || a - b);
+  if (tiers.length === 0) return { candidates, tier: null };
+
+  return {
+    candidates: candidates.filter(({ plan }) => tierOf(plan.vendor) === tiers[0]),
+    tier: tiers[0],
+  };
+}
+
 function selectDefaultVendors(plans, input, vendors, ctx) {
   const defaultVendor = { CE: null, HP: null };
 
@@ -81,7 +114,7 @@ function selectDefaultVendors(plans, input, vendors, ctx) {
   addLedger(
     ctx,
     'defaultVendor.selectionRule',
-    'Complete plans; non-partial totals first; lowest total within each group; vendor order breaks ties',
+    'Complete plans; preferred price tier, else the nearest tier (cheaper first); non-partial totals first, then lowest total; vendor order breaks ties',
     'CE and HP defaults are selected independently using plan data.'
   );
 
@@ -103,14 +136,15 @@ function selectDefaultVendors(plans, input, vendors, ctx) {
       : 'The configured plan-total cap is evaluated separately for each plan type and monthly budget band.'
   );
 
+  const preferredTier = getPreferredTier(input);
+
   addLedger(
     ctx,
-    'defaultVendor.excludedInputs',
-    {
-      itSupport: input.itSupport,
-      downtime: input.downtime,
-    },
-    'IT support model and downtime are recorded but are not separate inputs to this selection rule.'
+    'defaultVendor.preferredTier',
+    preferredTier === null ? 'none' : TIER_NAMES[preferredTier],
+    preferredTier === null
+      ? 'No monthly budget band is available, so no price tier is preferred.'
+      : `Set from monthly budget (${input.monthlyBudgetBand}), downtime tolerance (${input.downtime}) and IT support (${input.itSupport}). Vendor price tiers are a team judgement and only choose the default.`
   );
 
   for (const planType of PLAN_TYPES) {
@@ -207,6 +241,22 @@ function selectDefaultVendors(plans, input, vendors, ctx) {
           `No complete ${planType} candidates fit the budget cap of PHP ${budgetCap}; the budget filter was dropped.`
         );
       }
+    }
+
+    const tiered = filterByTier(candidates, preferredTier);
+    candidates = tiered.candidates;
+
+    if (preferredTier !== null) {
+      addLedger(
+        ctx,
+        `defaultVendor.${planType}.tier`,
+        tiered.tier === null ? 'not applied' : TIER_NAMES[tiered.tier],
+        tiered.tier === null
+          ? `No ${planType} candidate has a price tier, so the tier preference was not applied.`
+          : tiered.tier === preferredTier
+            ? `The preferred ${TIER_NAMES[preferredTier]} tier has a complete ${planType} plan.`
+            : `No complete ${planType} plan is in the preferred ${TIER_NAMES[preferredTier]} tier, so the nearest tier was used.`
+      );
     }
 
     candidates.sort((a, b) => compareCandidates(a, b, vendorOrder));

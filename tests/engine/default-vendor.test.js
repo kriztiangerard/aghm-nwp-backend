@@ -316,18 +316,13 @@ test('AC8: CE and HP defaults are selected independently', () => {
   assert.ok(managementEntry);
   assert.equal(managementEntry.valueUsed, 'dashboard');
 
-  const excludedInputsEntry = ctx.ledger.find(
-    (entry) => entry.field === 'defaultVendor.excludedInputs'
+  const preferredTierEntry = ctx.ledger.find(
+    (entry) => entry.field === 'defaultVendor.preferredTier'
   );
 
-  assert.ok(excludedInputsEntry);
-  assert.deepEqual(excludedInputsEntry.valueUsed, {
-    itSupport: 'inHouse',
-    downtime: 'everyMinute',
-  });
-  assert.ok(
-    excludedInputsEntry.reason.includes('not separate inputs')
-  );
+  assert.ok(preferredTierEntry);
+  // under15k is budget, raised to mid by everyMinute.
+  assert.equal(preferredTierEntry.valueUsed, 'mid');
 });
 
 test('AC9: identical inputs produce identical results and ledger entries', () => {

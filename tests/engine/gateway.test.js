@@ -66,7 +66,7 @@ test('CE does not apply a VPN constraint when its tunnel requirement is zero', (
   assert.equal(ctx.flags.length, 0);
 });
 
-test('unknown tunnel capacity is flagged and does not qualify for HP VPN requirements', () => {
+test('unknown tunnel capacity qualifies and is flagged for confirmation', () => {
   const ctx = createCtx();
   const catalog = [
     makeGateway({ sku: 'GW-UNKNOWN', max_vpn_tunnels: null }),
@@ -80,7 +80,8 @@ test('unknown tunnel capacity is flagged and does not qualify for HP VPN require
     ctx,
   });
 
-  assert.equal(result.ok, false);
+  assert.equal(result.ok, true);
+  assert.equal(result.sku.sku, 'GW-UNKNOWN');
   assert.ok(ctx.flags.some((flag) => flag.code === 'GATEWAY_VPN_CAPACITY_UNKNOWN'));
 });
 
@@ -90,7 +91,7 @@ test('known sufficient gateway does not get an unknown-capacity flag from an unr
     makeGateway({
       sku: 'GW-UNKNOWN',
       max_vpn_tunnels: null,
-      price: 50,
+      price: 150,
     }),
     makeGateway({
       sku: 'GW-SUFFICIENT',
@@ -270,7 +271,7 @@ test(`unknown VPN capacity is flagged for ${vendor}`, () => {
       ctx,
     });
 
-    assert.equal(result.ok, false);
+    assert.equal(result.ok, true);
     assert.ok(
       ctx.flags.some(
         (flag) => flag.code === 'GATEWAY_VPN_CAPACITY_UNKNOWN'

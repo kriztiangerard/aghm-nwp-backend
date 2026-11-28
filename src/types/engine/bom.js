@@ -238,16 +238,22 @@ function buildInstallationMaterials(plan, requirements = {}) {
   }));
 
   if (plan.optics !== undefined && plan.optics !== null) {
-    const { links, modules, formFactor } = plan.optics;
-    items.push({
-      item: 'sfp_modules',
-      description: `SFP modules; estimate based on ${links} fiber uplink${links === 1 ? '' : 's'}.`,
-      unit: 'module',
-      links,
-      modules,
-      formFactor: formFactor === null ? 'form factor not determined' : formFactor,
-      priceDisplay: 'price on request',
-    });
+    // NWP-ENGINE-019 AC7: one row per module type, so the quantities are never combined across types.
+    const rows = plan.optics.moduleTypes ?? [plan.optics];
+    for (const { links, modules, formFactor, runsAt1Gbps } of rows) {
+      const speed = runsAt1Gbps
+        ? ' These links run at 1 Gbps; confirm the SFP+ port accepts a 1 Gbps SFP module.'
+        : '';
+      items.push({
+        item: 'sfp_modules',
+        description: `SFP modules; estimate based on ${links} fiber uplink${links === 1 ? '' : 's'}.${speed}`,
+        unit: 'module',
+        links,
+        modules,
+        formFactor: formFactor === null ? 'form factor not determined' : formFactor,
+        priceDisplay: 'price on request',
+      });
+    }
   }
 
   return {

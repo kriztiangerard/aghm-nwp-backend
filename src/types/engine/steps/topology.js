@@ -76,11 +76,12 @@ function allocate(pool, count, needsPoe, overflow) {
 
 const positiveInt = (value) => (Number.isInteger(value) && value > 0 ? value : 0);
 
+// NWP-ENGINE-019 AC6: only the Floor 1 closet, which holds the gateway and core, is the main one.
 const placementForFloor = (floorNumber, qty = 1) => ({
   floorId: `floor-${floorNumber}`,
   floorLabel: `Floor ${floorNumber}`,
   closetId: `closet-${floorNumber}`,
-  closetLabel: `Floor ${floorNumber} Main Network Closet`,
+  closetLabel: `Floor ${floorNumber} ${floorNumber === 1 ? 'Main Network Closet' : 'Network Closet'}`,
   qty,
 });
 
@@ -211,7 +212,7 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
     qty: gatewayItem.qty,
     status: gateway.status,
     integrates: integratesController ? ['firewall', 'controller'] : ['firewall'],
-  });
+  }, [placementForFloor(1, gatewayItem.qty)]);
 
   // The firewall is always a separate logical node tied to the gateway SKU (no vendor has a dedicated firewall).
   const firewallId = addNode({
@@ -226,6 +227,7 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
   let controllerId = null;
   if (controllerItem) {
     const controller = describe(controllerItem);
+    // A cloud controller is not equipment in a closet.
     controllerId = addNode({
       id: `controller-${controller.sku}-0`,
       role: 'controller',
@@ -234,7 +236,7 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
       sku: controller.sku,
       qty: controllerItem.qty,
       status: controller.status,
-    });
+    }, controller.row?.controller_type === 'cloud' ? undefined : [placementForFloor(1, controllerItem.qty)]);
   }
 
   // ---- Switches: one node per unit, so each device can attach to exactly one switch ----

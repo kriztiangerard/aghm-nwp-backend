@@ -212,6 +212,100 @@ function flagSunsettingSelections(ctx, selections) {
   }
 }
 
+// NWP-ENGINE-019 AC17: the gateway connects to the core switch, or on one floor to each switch. This only
+// warns, because the recorded LAN port counts are not reliable enough to change the selection.
+function flagGatewayLanPorts(ctx, gateway, planItems) {
+  const switches = planItems.filter((item) => item.category === 'switch');
+  if (switches.length === 0) return;
+
+  const core = switches.find((item) => !Number.isInteger(item.floor));
+  const needed = core ? core.qty : switches.reduce((total, item) => total + item.qty, 0);
+  const recorded = gateway.copper_ports;
+
+  if (!Number.isInteger(recorded) || recorded <= 0) {
+    addFlag(
+      ctx,
+      'GATEWAY_LAN_PORTS_UNCONFIRMED',
+      `The LAN port count of ${gateway.sku} is not confirmed in the catalog; confirm it can connect ${needed} switch link(s) before purchase.`,
+    );
+  } else if (recorded < needed) {
+    addFlag(
+      ctx,
+      'GATEWAY_LAN_PORTS_INSUFFICIENT',
+      `${gateway.sku} records ${recorded} LAN port(s), but this plan needs ${needed} switch link(s) to it; confirm the connection design before purchase.`,
+    );
+  }
+}
+
+// NWP-ENGINE-019 AC6/AC10: the gateway, core switch, controller and anything else without a floor of its own
+// sit in the Floor 1 closet; an access switch sits in the closet of the floor it was sized for.
+function chooseClosetEnclosures({ requirements, devices, ctx, catalog, vendor, plan, input }) {
+  const floorCount = Number.isInteger(input.floors) && input.floors > 1 ? input.floors : 1;
+  const closetDevices = Array.from({ length: floorCount }, () => []);
+  for (const device of devices) {
+    const floor = Number.isInteger(device.floor) && device.floor >= 1 && device.floor <= floorCount
+      ? device.floor
+      : 1;
+    closetDevices[floor - 1].push(device);
+  }
+
+  if (floorCount === 1) {
+    const { requiredU } = computeRequiredRackUnits(devices, ctx);
+    const result = chooseEnclosure({
+      requirements, devices, ctx, catalog, vendor, plan, housing: input.housing, requiredU,
+    });
+    return {
+      results: [{ floor: 1, result }],
+      selection: result,
+      unmet: result.ok ? null : result.unmet,
+    };
+  }
+
+  // Rack-unit notices are about a device model, so they are raised once for the whole plan.
+  computeRequiredRackUnits(devices, ctx);
+
+  const results = closetDevices.map((items, index) => {
+    const floor = index + 1;
+    const closet = createCtx();
+    const { requiredU } = computeRequiredRackUnits(items, createCtx());
+    const result = chooseEnclosure({
+      requirements, devices: items, ctx: closet, catalog, vendor, plan, housing: input.housing, requiredU,
+    });
+
+    ctx.flags.push(...closet.flags.filter(
+      (flag) => !ctx.flags.some((seen) => seen.code === flag.code && seen.message === flag.message),
+    ));
+    ctx.ledger.push(...closet.ledger.map(
+      (entry) => ({ ...entry, reason: `Floor ${floor} closet: ${entry.reason}` }),
+    ));
+
+    return { floor, requiredU, result };
+  });
+
+  const failed = results.filter(({ result }) => !result.ok);
+  const unmet = failed.length === 0
+    ? null
+    : {
+        category: 'enclosure',
+        vendor,
+        reason: failed.map(({ floor, result }) => `Floor ${floor} closet: ${result.unmet.reason}`).join(' '),
+      };
+
+  // The top-level fields keep the single-enclosure shape: they describe the first closet that failed, else the
+  // first closet that needs an enclosure. Every closet is listed under `closets`.
+  const primary = (failed[0] ?? results.find(({ result }) => result.qty > 0) ?? results[0]).result;
+
+  return {
+    results,
+    selection: {
+      ...primary,
+      ...(unmet ? { unmet } : {}),
+      closets: results.map(({ floor, requiredU, result }) => ({ floor, requiredU, ...result })),
+    },
+    unmet,
+  };
+}
+
 // NWP-ENGINE-019 AC2: the full catalog rows behind the Cost-Efficient plan's picks. This has to run before
 // toPublicPlan, which strips switch rows down to SKU strings.
 function collectCePicks(plan, vendorName, catalog) {
@@ -305,6 +399,11 @@ function buildPlan(vendor, planType, reqs, input, catalog, ctx, steps = {}) {
     sku: gatewayResult.sku,
     qty: gatewayResult.qty,
   });
+    // NWP-ENGINE-019 AC13: a gateway shown without the required VPN leaves the plan incomplete.
+    if (gatewayResult.vpnUnmet) {
+      ctx.unmet.push({ ...gatewayResult.vpnUnmet });
+      plan.complete = false;
+    }
   } else {
     recordUnmetIfMissing(ctx, gatewayResult.unmet, vendor.name, catalog);
     plan.complete = false;
@@ -473,6 +572,7 @@ function buildPlan(vendor, planType, reqs, input, catalog, ctx, steps = {}) {
         selectedDeviceItems.push({
   sku: accessSwitch.sku,
   qty: accessSwitch.qty,
+  floor: accessSwitch.floor,
 });
       });
 
@@ -491,6 +591,10 @@ function buildPlan(vendor, planType, reqs, input, catalog, ctx, steps = {}) {
       recordUnmetIfMissing(ctx, switchResult.unmet, vendor.name, catalog);
       plan.complete = false;
     }
+  }
+
+  if (gatewayResult.ok) {
+    flagGatewayLanPorts(ctx, gatewayResult.sku, plan.items);
   }
 
     // NWP-ENGINE-015 AC7: controller step. Selection logic lives in NWP-ENGINE-018.
@@ -544,43 +648,44 @@ const resolvedItems = selectedDeviceItems;
     ctx,
     plan.switchSelection?.ok === true ? plan.switchSelection : undefined,
   );
-  const { requiredU } = computeRequiredRackUnits(resolvedItems, ctx);
-
-  const enclosureResult = chooseEnclosure({
+  // NWP-ENGINE-019 AC10: each floor has its own closet or small wall cabinet.
+  const closets = chooseClosetEnclosures({
     requirements: planRequirements,
     devices: resolvedItems,
     ctx,
     catalog,
     vendor: vendor.name,
     plan: planType,
-    housing: input.housing,
-    requiredU,
+    input,
   });
 
     // Preserve the enclosure selector result for both success and failure.
-  plan.enclosureSelection = enclosureResult;
-  assertSelectedVendor(enclosureResult, vendor, 'enclosure');
+  plan.enclosureSelection = closets.selection;
 
-  if (enclosureResult.ok) {
-    if (enclosureResult.qty > 0) {
+  for (const { floor, result } of closets.results) {
+    assertSelectedVendor(result, vendor, 'enclosure');
+    if (result.ok && result.qty > 0) {
       plan.items.push({
         category: 'enclosure',
-        sku: enclosureResult.sku.sku,
-        qty: enclosureResult.qty,
+        sku: result.sku.sku,
+        qty: result.qty,
+        ...(closets.results.length > 1 ? { floor } : {}),
       });
     }
-  } else {
-    recordUnmetIfMissing(ctx, enclosureResult.unmet, vendor.name, catalog);
+  }
+
+  if (closets.unmet) {
+    recordUnmetIfMissing(ctx, closets.unmet, vendor.name, catalog);
     plan.complete = false;
   }
 
   // NWP-ENGINE-019 AC4: one confirm-availability notice for each selected Sunsetting SKU.
-  flagSunsettingSelections(
-    ctx,
-    enclosureResult.ok && enclosureResult.qty > 0
-      ? [...selectedDeviceItems, { sku: enclosureResult.sku }]
-      : selectedDeviceItems,
-  );
+  flagSunsettingSelections(ctx, [
+    ...selectedDeviceItems,
+    ...closets.results
+      .filter(({ result }) => result.ok && result.qty > 0)
+      .map(({ result }) => ({ sku: result.sku })),
+  ]);
 
   // Power protection is advisory; it does not select equipment or affect the BOM.
   plan.powerProtection = buildPowerProtection(

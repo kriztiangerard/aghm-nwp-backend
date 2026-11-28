@@ -40,6 +40,13 @@ export interface Optics {
   links: number;
   modules: number;
   formFactor: 'SFP' | 'SFP+' | 'SFP28' | 'QSFP+' | 'QSFP28' | null;
+  // Present when the links need more than one module type or run at 1 Gbps.
+  moduleTypes?: {
+    formFactor: Optics['formFactor'];
+    links: number;
+    modules: number;
+    runsAt1Gbps: boolean;
+  }[];
 }
 
 export interface PlanWireless {

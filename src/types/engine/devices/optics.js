@@ -7,8 +7,8 @@
 // reads the catalog, or touches a price.
 //
 // Consumes: NormalizedInput (floors), Requirements (backbone from 005, redundancy from 003),
-//           the selected access switch's specs (sfp_ports, sfp_form_factor), ctx.
-// Produces: null (copper backbone) | { links, modules, formFactor }
+//           the selected switches' specs (sfp_ports, sfp_form_factor), ctx.
+// Produces: null (copper backbone) | { links, modules, formFactor, moduleTypes? }
 // Rules: pure function (no I/O); assumptions go through ctx.
 
 const { addLedger, addFlag, ValidationError } = require('../ctx.js');
@@ -86,6 +86,88 @@ function countUplinkLinks(switching) {
   return links > 0 ? links : null;
 }
 
+// ---------------------------------------------------------------------------
+// NWP-ENGINE-019 AC7: the module type depends on BOTH ends of a link (access switch and core).
+// ---------------------------------------------------------------------------
+const switchSpecsOf = (sku) => sku?.switch_specs ?? sku;
+
+function readFormFactor(sku) {
+  const specs = switchSpecsOf(sku);
+  if (!Number.isFinite(specs?.sfp_ports) || specs.sfp_ports < 1) return null;
+  return SFP_FORM_FACTORS.has(specs.sfp_form_factor) ? specs.sfp_form_factor : null;
+}
+
+// Same type at both ends uses that type. SFP with SFP+ runs at 1 Gbps on SFP modules. Anything else,
+// or an end that is not recorded, is not guessed.
+function moduleForEnds(first, second) {
+  if (first === null || second === null) return { formFactor: null, mixed: false };
+  if (first === second) return { formFactor: first, mixed: false };
+  const ends = new Set([first, second]);
+  if (ends.has('SFP') && ends.has('SFP+')) return { formFactor: 'SFP', mixed: true };
+  return { formFactor: null, mixed: false };
+}
+
+// One entry per access switch group. Returns null when there are no uplinks between two switches to check.
+function resolveUplinkModules(switching, ctx) {
+  const groups = (switching?.accessSwitches ?? [])
+    .map((accessSwitch) => ({ accessSwitch, links: accessSwitch.qty * (accessSwitch.uplinksPerSwitch ?? 0) }))
+    .filter((group) => group.links > 0);
+  if (groups.length === 0) return null;
+
+  // Without a separate core selection, the core is the first access switch model (as in orchestration).
+  const core = switching.coreSwitch?.sku ?? switching.accessSwitches[0].sku;
+
+  const byType = new Map();
+  const mixedPairs = new Set();
+  const unreadable = new Set();
+
+  for (const { accessSwitch, links } of groups) {
+    const accessType = readFormFactor(accessSwitch.sku);
+    const coreType = readFormFactor(core);
+    const { formFactor, mixed } = moduleForEnds(accessType, coreType);
+    const entry = byType.get(formFactor) ?? { formFactor, links: 0, modules: 0, runsAt1Gbps: false };
+    entry.links += links;
+    entry.modules += countOpticModules(links);
+    if (mixed) {
+      entry.runsAt1Gbps = true;
+      mixedPairs.add(`${accessSwitch.sku?.sku ?? 'access switch'} (${accessType}) to ${core?.sku ?? 'core switch'} (${coreType})`);
+    }
+    byType.set(formFactor, entry);
+
+    if (accessType === null) unreadable.add(accessSwitch.sku);
+    if (coreType === null) unreadable.add(core);
+    if (accessType !== null && coreType !== null && formFactor === null) {
+      addFlag(
+        ctx,
+        'OPTICS_FORM_FACTOR_MISMATCH',
+        `The two ends of a fiber uplink use ${accessType} and ${coreType} ports; confirm a compatible module before purchase.`
+      );
+    }
+  }
+
+  // The existing flags name why an end could not be read; each is raised once.
+  const raised = new Set();
+  for (const sku of unreadable) {
+    const scratch = { flags: [] };
+    resolveFormFactor(switchSpecsOf(sku), scratch);
+    for (const flag of scratch.flags) {
+      if (raised.has(flag.code)) continue;
+      raised.add(flag.code);
+      addFlag(ctx, flag.code, sku?.sku ? `${sku.sku}: ${flag.message}` : flag.message);
+    }
+  }
+
+  if (mixedPairs.size > 0) {
+    addFlag(
+      ctx,
+      'OPTICS_MIXED_SPEED',
+      `These fiber uplinks join SFP and SFP+ ports, so they run at 1 Gbps on 1 Gbps SFP modules: ${[...mixedPairs].sort().join('; ')}. Confirm that the SFP+ port accepts a 1 Gbps SFP module.`
+    );
+  }
+
+  return [...byType.values()];
+}
+
 function planOptics(input, reqs, sw, ctx, switching) {
   // -------------------------------------------------------------------------
   // SUBTASK 4 — Return null for a copper backbone; throw on an unrecognised value
@@ -101,7 +183,11 @@ function planOptics(input, reqs, sw, ctx, switching) {
   const floorLinks = countFiberLinks(input.floors, reqs.redundancy); // SUBTASK 1
   const links = countUplinkLinks(switching) ?? floorLinks;
   const modules = countOpticModules(links);                       // SUBTASK 2
-  const formFactor = resolveFormFactor(sw, ctx);                  // SUBTASK 3
+  const moduleTypes = resolveUplinkModules(switching, ctx);
+  // SUBTASK 3: with no switch-to-switch uplinks to check, the selected switch's own ports decide.
+  const formFactor = moduleTypes === null
+    ? resolveFormFactor(sw, ctx)
+    : moduleTypes.length === 1 ? moduleTypes[0].formFactor : null;
 
   // -------------------------------------------------------------------------
   // SUBTASK 5 — Record assumptions. A single floor with fiber means the user
@@ -125,7 +211,10 @@ function planOptics(input, reqs, sw, ctx, switching) {
   );
 
   // Output deliberately has no sku, price or BOM line (AC 7).
-  return { links, modules, formFactor };
+  // The breakdown is added only when one form factor cannot describe the result.
+  const needsBreakdown = moduleTypes !== null &&
+    (moduleTypes.length > 1 || moduleTypes.some((entry) => entry.runsAt1Gbps));
+  return needsBreakdown ? { links, modules, formFactor, moduleTypes } : { links, modules, formFactor };
 }
 
 module.exports = { planOptics, countUplinkLinks, countFiberLinks, countOpticModules, resolveFormFactor };

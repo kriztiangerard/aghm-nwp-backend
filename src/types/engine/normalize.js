@@ -576,6 +576,8 @@ const hasLargeRooms = requireYesNo(raw, QKEY.hasLargeRooms);
     downtime,
     guestWifi: isYes(raw[QKEY.guestWifi]),
     sensitiveData,
+    // NWP-ENGINE-019 AC19: kept only so the regulation note can say "may apply".
+    ...(isNotSure(raw[QKEY.sensitiveData]) ? { sensitiveDataUnsure: true } : {}),
     apps: appList,
     housing,
     monthlyBudgetBand,

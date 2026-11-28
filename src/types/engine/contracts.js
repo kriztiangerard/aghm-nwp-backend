@@ -1,7 +1,8 @@
 'use strict';
 // NWP-ENGINE-001 — hand-off shapes between steps. Frozen at the end of Day 1.
 // A change needs a pull request approved by the producer and consumer owners; bump CONTRACT_VERSION if incompatible.
-// Additive, no bump (NWP-ENGINE-019): Plan gains optional wireless.
+// Additive, no bump (NWP-ENGINE-019): Plan gains optional wireless; optics gains optional moduleTypes;
+// NormalizedInput gains optional sensitiveDataUnsure.
 const CONTRACT_VERSION = 3; // 3: CatalogSku gains required name, optional price provenance (price_source, is_stale, price_updated_at), enclosure form_factor, the controller category and managed-device limits, sfp_form_factor and capabilities. Requirements types backbone ('fiber'|'copper') and adds horizontalCablingOptions. Adds the VendorDescriptor, Bom, BomLine, Plan and EngineResult shapes with validators. Additive, no bump: CatalogSku gains optional poe_standard. 2: Corrections to the requirements and selection result shapes, plus new fields in normalized input. CatalogSku now lists the Appendix A fields and validateCatalogSku was added.
 
 /**
@@ -20,6 +21,7 @@ const CONTRACT_VERSION = 3; // 3: CatalogSku gains required name, optional price
  * @property {'fiber'|'dslCellular'|'notChecked'} connection
  * @property {'waitItOut'|'sameDay'|'everyMinute'} downtime
  * @property {boolean} guestWifi @property {boolean} sensitiveData        // "not sure" already converted to true
+ * @property {boolean} [sensitiveDataUnsure]   // NWP-ENGINE-019: present (true) when sensitive data was answered "not sure"
  * @property {string[]} apps
  * @property {'closet'|'wall'|'notSure'} housing
  * @property {'under15k'|'15to40k'|'over40k'} monthlyBudgetBand
@@ -119,7 +121,9 @@ const CONTRACT_VERSION = 3; // 3: CatalogSku gains required name, optional price
  * @property {Object[]} unmet
  * @property {Object[]} flags
  * @property {Object[]} ledger
- * @property {null|{links: number, modules: number, formFactor: (string|null)}} [optics]   // NWP-ENGINE-012 requirement; null = copper backbone; never a BOM line
+ * @property {null|{links: number, modules: number, formFactor: (string|null), moduleTypes?: Object[]}} [optics]   // NWP-ENGINE-012 requirement; null = copper backbone; never a BOM line
+ *                                              // NWP-ENGINE-019: moduleTypes [{formFactor, links, modules, runsAt1Gbps}] is present when the
+ *                                              // links need more than one type or run at 1 Gbps; formFactor is null when types differ
  * @property {{standard: string, requestedStandard: string, total: number, perFloor: number[]}} [wireless]
  *                                              // NWP-ENGINE-019: the AP sizing this plan used; differs from
  *                                              // requirements.wireless after a Wi-Fi 6E fallback
@@ -277,6 +281,9 @@ function validateNormalizedInput(input) {
     }
     if (typeof input.sensitiveData !== 'boolean') {
         throw new ValidationError('sensitiveData', 'Must be a boolean.');
+    }
+    if (input.sensitiveDataUnsure !== undefined && typeof input.sensitiveDataUnsure !== 'boolean') {
+        throw new ValidationError('sensitiveDataUnsure', 'Must be a boolean when present.');
     }
 
     if (!Array.isArray(input.apps) || !input.apps.every((app) => typeof app === 'string' && app.trim().length > 0)) {

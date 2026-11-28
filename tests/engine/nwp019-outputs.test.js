@@ -1,6 +1,6 @@
 'use strict';
 
-// NWP-ENGINE-019 AC6 (topology floors), AC7 (optics), AC9 (BOM limitation) and AC10 (single enclosure).
+// NWP-ENGINE-019 AC6 (topology floors), AC7 (optics), AC9 (BOM limitation) and AC10 (per-floor closets).
 // AC8 is display-only and is covered in the frontend repo.
 
 const test = require('node:test');
@@ -102,12 +102,12 @@ test('AC8 (engine side): no firewall BOM line is created', () => {
   assert.ok(!run().ce.bom.lines.some((line) => /firewall/i.test(line.category)));
 });
 
-const enclosureNotice = (plan) => plan.limitations.filter((line) => /separate floor network closets/.test(line));
+const enclosureNotice = (plan) => plan.limitations.filter((line) => /network closet or small wall cabinet on each floor/.test(line));
 
-test('AC10: a multi-floor plan with an enclosure discloses the single enclosure once', () => {
+test('AC10: a multi-floor plan discloses the closet assumption once', () => {
   const { ce } = run((config) => { config.physicalSpace.numberOfFloors = 2; });
   assert.equal(enclosureNotice(ce).length, 1);
-  assert.match(enclosureNotice(ce)[0], /total rack units.*site survey/);
+  assert.match(enclosureNotice(ce)[0], /sized on its own equipment.*site survey/);
 });
 
 test('AC10: a single-floor plan has no enclosure notice', () => {

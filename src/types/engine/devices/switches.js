@@ -122,6 +122,14 @@ function getSwitchSpecs(switchSku) {
 
   return {
     ...specs,
+    copper_ports:
+      specs.copper_ports ??
+      (
+        Number.isInteger(specs.port_count) &&
+        Number.isInteger(specs.sfp_ports)
+          ? specs.port_count - specs.sfp_ports
+          : undefined
+      ),
     port_count:
       specs.port_count ??
       (
@@ -203,7 +211,8 @@ function switchMeetsRequirements({
   requiredPoePorts,
   requiredPoeBudgetW,
   requiredPoeStandard = 'af',
-  requiredUplinks = 0
+  requiredUplinks = 0,
+  reservedCopperPorts = 0
 }) {
   const specs = getSwitchSpecs(switchSku);
 
@@ -223,14 +232,15 @@ function switchMeetsRequirements({
   }
 
   if (
-    !Number.isInteger(specs.port_count) ||
+    !Number.isInteger(specs.copper_ports) ||
     !Number.isInteger(specs.poe_ports) ||
     !Number.isFinite(specs.poe_budget_w)
   ) {
     return false;
   }
 
-  if (specs.port_count < requiredPorts + requiredUplinks) {
+  // NWP-ENGINE-019 AC15: devices use copper ports only; uplinks use SFP ports (checked below).
+  if (specs.copper_ports < requiredPorts + reservedCopperPorts) {
     return false;
   }
 
@@ -267,7 +277,8 @@ function getMinimumIdenticalSwitchQuantity({
   requiredPoePorts,
   requiredPoeBudgetW,
   requiredPoeStandard = 'af',
-  requiredUplinks = 0
+  requiredUplinks = 0,
+  reservedCopperPorts = 0
 }) {
   const specs = getSwitchSpecs(switchSku);
 
@@ -286,8 +297,8 @@ function getMinimumIdenticalSwitchQuantity({
 
   if (
     !specs ||
-    !Number.isInteger(specs.port_count) ||
-    specs.port_count <= 0 ||
+    !Number.isInteger(specs.copper_ports) ||
+    specs.copper_ports <= 0 ||
     !Number.isInteger(specs.poe_ports) ||
     specs.poe_ports < 0 ||
     !Number.isFinite(specs.poe_budget_w) ||
@@ -303,9 +314,9 @@ function getMinimumIdenticalSwitchQuantity({
     return null;
   }
 
-  const usablePorts = specs.port_count - requiredUplinks;
+  const usablePorts = specs.copper_ports - reservedCopperPorts;
   const capabilities = getPoePortCapabilities(switchSku);
-  const capablePoePorts = capabilities[requiredPoeStandard];
+  const capablePoePorts = Math.min(capabilities[requiredPoeStandard], usablePorts);
 
   if (usablePorts <= 0) return null;
   if (requiredPoePorts > 0 && capablePoePorts <= 0) return null;
@@ -602,6 +613,8 @@ function selectSwitches({
         requiredPoeBudgetW: budget.budgetW,
         requiredPoeStandard: floorPoeStandard,
         requiredUplinks: accessUplinks,
+        // On one floor there is no core, so every unit keeps a copper port for its gateway link.
+        reservedCopperPorts: floorCount === 1 ? 1 : 0,
       });
 
     const predicate = switchSku => minimumQuantity(switchSku) !== null;

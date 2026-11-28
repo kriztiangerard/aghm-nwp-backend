@@ -29,9 +29,10 @@ test('AC1: CE takes the lowest price x quantity, not the lowest unit price', () 
 
 test('AC1: a cheap model still wins when it is also cheapest in total', () => {
   const { ce } = run(manyWiredPcs, switchCatalog(
-    switchSku('SW8', 3000, 1, 8), switchSku('SW48', 12000, 1, 48, { poe_budget_w: 600 }),
+    switchSku('SW8', 2000, 1, 8), switchSku('SW48', 12000, 1, 48, { poe_budget_w: 600 }),
   ));
-  assert.deepEqual(itemsOf(ce, 'switch').map(({ sku, qty }) => [sku, qty]), [['SW8', 6]]);
+  // One copper port per unit is kept for the gateway link, so 9 small units still cost less than 2 large ones.
+  assert.deepEqual(itemsOf(ce, 'switch').map(({ sku, qty }) => [sku, qty]), [['SW8', 9]]);
 });
 
 test('AC1: equal totals break on unit price, then SKU id', () => {

@@ -20,6 +20,17 @@ module.exports = Object.freeze({
     door_controller: true, smart_sensor: true, pos_terminal: false, network_printer: false, other: true,
   },
   BUDGET_BAND_EDGES_PHP: { entryMax: 15000, mainstreamMax: 40000 },
+  // PARAM (NWP-ENGINE-019 AC11): relative price tier per vendor, 1 = budget, 2 = mid, 3 = higher. This is a
+  // team judgement that only chooses the default vendor; every vendor stays selectable. Names match Vendor.name.
+  VENDOR_PRICE_TIERS: Object.freeze({
+    'TP-Link Omada': 1,
+    Ruijie: 1,
+    'Grandstream GWN Cloud': 1,
+    'Ubiquiti UniFi': 2,
+    'HPE Aruba Instant On': 2,
+    'Cisco Business': 3,
+  }),
+  PREFERRED_TIER_BY_BUDGET_BAND: Object.freeze({ under15k: 1, '15to40k': 2, over40k: 3 }),
   BUDGET_BAND_PLAN_CAP_PHP: null, // PARAM: team must define plan-total caps; null disables budget filtering.
   // Q10 fallback bands: NOT YET DEFINED. Do not invent values (decision D6).
   Q10_FALLBACK_BANDS: null,

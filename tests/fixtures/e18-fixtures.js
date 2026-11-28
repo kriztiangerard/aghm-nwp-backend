@@ -38,6 +38,7 @@ const gateway = (sku, overrides = {}) => ({
   status: 'ACTIVE',
   price: 5000,
   currency: 'PHP',
+  copper_ports: 8,
   ...overrides,
 });
 

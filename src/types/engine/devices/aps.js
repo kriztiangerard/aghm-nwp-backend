@@ -53,11 +53,37 @@ function matchesGeneration(sku, target) {
     return standard >= 6 && supports6Ghz(sku);
   }
 
+  // NWP-ENGINE-019 AC12: the Wi-Fi 6 requirement is a minimum, so 6E and Wi-Fi 7 access points also qualify.
   if (target === '6') {
-    return standard === 6 && !supports6Ghz(sku);
+    return standard >= 6;
   }
 
   return false;
+}
+
+// NWP-ENGINE-019 AC16: PoE and switch sizing need both values; an AP without them cannot be planned.
+function hasPlanningData(sku) {
+  const drawW = getMaxPowerDrawW(sku);
+  return Number.isFinite(drawW) && drawW >= 0 && getPoeStandard(sku) !== undefined;
+}
+
+// Only APs that would otherwise have been candidates are named.
+function flagIncompleteAps(ctx, vendor, candidates) {
+  const skipped = candidates
+    .filter((sku) =>
+      ['ACTIVE', 'SUNSETTING'].includes(sku.status) &&
+      Number.isFinite(sku.price) &&
+      !hasPlanningData(sku))
+    .map((sku) => sku.sku)
+    .sort();
+
+  if (skipped.length === 0) return;
+
+  addFlag(
+    ctx,
+    'AP_DATA_INCOMPLETE',
+    `Some ${vendor} access points were skipped because their power draw or PoE standard is missing from the catalog: ${skipped.join(', ')}.`
+  );
 }
 
 function normalizeApSku(sku, vendor) {
@@ -143,8 +169,14 @@ function selectAccessPoints({
       })
       .map((sku) => normalizeApSku(sku, vendor));
 
+    flagIncompleteAps(
+      selectionCtx,
+      vendor,
+      pool.filter((sku) => matchesGeneration(sku, wireless.standard))
+    );
+
     return selectSku({
-      pool,
+      pool: pool.filter(hasPlanningData),
       predicate: (sku) =>
         matchesGeneration(sku, wireless.standard),
       plan: selectionPlan,
