@@ -240,6 +240,23 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
   // ---- Switches: one node per unit, so each device can attach to exactly one switch ----
   // The first switch item is the core; every later switch item is an access switch.
   // With a single switch item there is no separate access layer, so the core units also serve the edge.
+  // NWP-ENGINE-019 AC6: an access switch sits on the floor it was sized for, and a separate core on
+  // Floor 1. Items without floor data keep the even spread.
+  const hasAccessLayer = switchItems.length > 1;
+  const switchPlacements = (item, layer, ordinal) => {
+    if (Number.isInteger(item.floor)) return [placementForFloor(item.floor, 1)];
+    if (layer === 'core' && hasAccessLayer) return [placementForFloor(1, 1)];
+    return distributedPlacements(1, input.floors, ordinal);
+  };
+  if (hasAccessLayer && input.floors > 1 && !Number.isInteger(switchItems[0].floor)) {
+    addLedger(
+      ctx,
+      'topology.coreFloor',
+      'Floor 1',
+      'ESTIMATE: the core switch is drawn in the Floor 1 network closet; confirm its location through a site survey.'
+    );
+  }
+
   const skuCounters = new Map();
   const nextIndex = (sku) => {
     const index = skuCounters.get(sku) ?? 0;
@@ -263,7 +280,7 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
           qty: 1,
           status: info.status,
         },
-        distributedPlacements(1, input.floors, switchOrdinal)
+        switchPlacements(item, layer, switchOrdinal)
       );
       switchOrdinal += 1;
       switchUnits.push({ id, layer, sku: item.sku, row: info.row });
@@ -273,6 +290,19 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
   const coreUnits = switchUnits.filter((unit) => unit.layer === 'core');
   const accessUnits = switchUnits.filter((unit) => unit.layer === 'access');
   const poolUnits = accessUnits.length > 0 ? accessUnits : coreUnits;
+
+  // NWP-ENGINE-019 AC6: place APs by the per-floor counts this plan was sized with, when they add up.
+  function apPlacements(qty) {
+    const perFloor = plan.wireless?.perFloor ?? reqs.wireless?.[plan.planType]?.perFloor;
+    const usable = Array.isArray(perFloor) &&
+      perFloor.length === input.floors &&
+      perFloor.every((count) => Number.isInteger(count) && count >= 0) &&
+      perFloor.reduce((sum, count) => sum + count, 0) === qty;
+    if (!usable) return distributedPlacements(qty, input.floors, 0);
+    return perFloor
+      .map((count, index) => placementForFloor(index + 1, count))
+      .filter((placement) => placement.qty > 0);
+  }
 
   // ---- Access points: one grouped node with the plan total (TOPO-003 AC10) ----
   const apQty = apItem ? apItem.qty : 0;
@@ -289,7 +319,7 @@ function buildTopology(plan, reqs, input, ctx, catalog) {
         qty: apItem.qty,
         status: ap.status,
       },
-      distributedPlacements(apItem.qty, input.floors, 0)
+      apPlacements(apItem.qty)
     );
   }
 

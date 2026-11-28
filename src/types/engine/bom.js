@@ -246,6 +246,7 @@ function buildInstallationMaterials(plan, requirements = {}) {
       links,
       modules,
       formFactor: formFactor === null ? 'form factor not determined' : formFactor,
+      priceDisplay: 'price on request',
     });
   }
 

@@ -25,6 +25,13 @@ const SEGMENT_REASONS = Object.freeze({
 
 const row = (setting, value, source) => ({ setting, value, source });
 
+// NWP-ENGINE-019 AC5: a pair is only claimed when the plan holds it. The core group is the first switch item.
+function lacksCorePair(plan) {
+  if (!Array.isArray(plan.items)) return false; // nothing to check against
+  const core = plan.items.find((item) => item.category === 'switch');
+  return !core || core.qty < 2;
+}
+
 function buildConfigurationPlan(plan, reqs) {
   if (!plan || typeof plan !== 'object') throw new TypeError('plan must be an object.');
   if (!reqs || typeof reqs !== 'object') throw new TypeError('reqs must be an object.');
@@ -96,7 +103,13 @@ function buildConfigurationPlan(plan, reqs) {
       rows.push(row('Internet link redundancy', value, 'Downtime tolerance'));
       if (reqs.redundancy === 'required') {
         rows.push(
-          row('Core switch redundancy', 'Redundant core switch pair', 'Downtime tolerance: every minute matters')
+          row(
+            'Core switch redundancy',
+            lacksCorePair(plan)
+              ? 'Redundant core switch pair requested; not included because the required switches could not be selected'
+              : 'Redundant core switch pair',
+            'Downtime tolerance: every minute matters'
+          )
         );
       }
     } else {

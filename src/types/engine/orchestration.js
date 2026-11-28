@@ -190,6 +190,54 @@ function assertSelectedVendor(selection, vendor, category) {
   throw error;
 }
 
+const SUNSETTING_FLAG_CODE = 'SKU_SUNSETTING';
+
+function flagSunsettingSelections(ctx, selections) {
+  const noticed = new Set();
+  for (const { sku } of selections) {
+    if (sku.status !== 'SUNSETTING' || noticed.has(sku.sku)) continue;
+    noticed.add(sku.sku);
+
+    // The controller selector raises its own notice; this one replaces it so the SKU is announced once.
+    const duplicate = ctx.flags.findIndex(
+      (flag) => flag.code === controllerStep.FLAG_CODES.SUNSETTING && flag.message.includes(sku.sku),
+    );
+    if (duplicate !== -1) ctx.flags.splice(duplicate, 1);
+
+    addFlag(
+      ctx,
+      SUNSETTING_FLAG_CODE,
+      `${sku.sku} is sunsetting; confirm availability with the vendor or distributor before purchase.`,
+    );
+  }
+}
+
+// NWP-ENGINE-019 AC2: the full catalog rows behind the Cost-Efficient plan's picks. This has to run before
+// toPublicPlan, which strips switch rows down to SKU strings.
+function collectCePicks(plan, vendorName, catalog) {
+  const rowFor = (category) => {
+    const item = plan.items.find((candidate) => candidate.category === category);
+    if (!item) return undefined;
+    return catalog.find(
+      (row) =>
+        row.vendor === vendorName &&
+        row.sku === item.sku &&
+        (row.category === category || (category === 'access_point' && row.category === 'ap')),
+    );
+  };
+
+  return {
+    gateway: rowFor('gateway'),
+    accessPoint: rowFor('access_point'),
+    switches: plan.switchSelection?.ok === true
+      ? {
+          accessSwitches: plan.switchSelection.accessSwitches,
+          coreSwitch: plan.switchSelection.coreSwitch ?? null,
+        }
+      : undefined,
+  };
+}
+
 function buildPlan(vendor, planType, reqs, input, catalog, ctx, steps = {}) {
   const selectorPlan = planType === 'CE'
     ? 'cost_efficient'
@@ -228,15 +276,18 @@ function buildPlan(vendor, planType, reqs, input, catalog, ctx, steps = {}) {
     ledger: ctx.ledger,
   };
 
-  const planRequirements = getPlanRequirements(reqs, planType);
+  let planRequirements = getPlanRequirements(reqs, planType);
   const selectedDeviceItems = [];
+  // NWP-ENGINE-019 AC2: for HP, the Cost-Efficient SKU already chosen in each category ({gateway,
+  // accessPoint, switches}). A category CE could not fill stays undefined, so HP uses its own fallback.
+  const cePicks = planType === 'HP' ? steps.cePicks ?? {} : {};
 
     const gatewayResult = steps.selectGateway({
     catalog,
     vendor: vendor.name,
     requirements: planRequirements,
     plan: selectorPlan,
-    cePick: steps.cePick,
+    cePick: cePicks.gateway,
     ctx,
   });
 
@@ -269,7 +320,7 @@ function buildPlan(vendor, planType, reqs, input, catalog, ctx, steps = {}) {
       vendor: vendor.name,
       requirements: planRequirements,
       plan: planType,
-      cePick: steps.cePick,
+      cePick: cePicks.accessPoint,
       ctx,
       input,
     });
@@ -278,6 +329,20 @@ function buildPlan(vendor, planType, reqs, input, catalog, ctx, steps = {}) {
     assertSelectedVendor(apResult, vendor, 'access_point');
 
     if (apResult.ok) {
+      // NWP-ENGINE-019 AC3: PoE, switching, topology and the output all use the sizing the AP selection
+      // actually used, which differs from the shared requirement after a Wi-Fi 6E fallback.
+      const wireless = apResult.wireless ?? planRequirements.wireless;
+      const sizing = wireless?.[planType];
+      if (sizing && Array.isArray(sizing.perFloor)) {
+        planRequirements = { ...planRequirements, wireless };
+        plan.wireless = {
+          standard: wireless.standard,
+          requestedStandard: reqs.wireless?.standard ?? wireless.standard,
+          total: sizing.total,
+          perFloor: [...sizing.perFloor],
+        };
+      }
+
       plan.items.push({
         category: 'access_point',
         sku: apResult.sku.sku,
@@ -325,7 +390,7 @@ function buildPlan(vendor, planType, reqs, input, catalog, ctx, steps = {}) {
       poeBudget,
       apSelection: apResult,
       plan: planType,
-      cePick: steps.cePick,
+      cePick: cePicks.switches,
       ctx,
     });
 
@@ -477,6 +542,7 @@ const resolvedItems = selectedDeviceItems;
     planRequirements,
     selectedSwitchSpecs,
     ctx,
+    plan.switchSelection?.ok === true ? plan.switchSelection : undefined,
   );
   const { requiredU } = computeRequiredRackUnits(resolvedItems, ctx);
 
@@ -507,6 +573,14 @@ const resolvedItems = selectedDeviceItems;
     recordUnmetIfMissing(ctx, enclosureResult.unmet, vendor.name, catalog);
     plan.complete = false;
   }
+
+  // NWP-ENGINE-019 AC4: one confirm-availability notice for each selected Sunsetting SKU.
+  flagSunsettingSelections(
+    ctx,
+    enclosureResult.ok && enclosureResult.qty > 0
+      ? [...selectedDeviceItems, { sku: enclosureResult.sku }]
+      : selectedDeviceItems,
+  );
 
   // Power protection is advisory; it does not select equipment or affect the BOM.
   plan.powerProtection = buildPowerProtection(
@@ -590,8 +664,12 @@ function toPublicPlan(plan) {
 
 // Per-vendor stage: CE then HP, reduced to public form and assembled.
 function buildVendorPlansAssembled({ vendor, input, requirements, catalog, sharedLedger, steps = DEFAULT_STEPS }) {
+  let cePicks;
+  // PLAN_TYPES lists CE first: HP steps up from what CE picked.
   return PLAN_TYPES.map(({ planType }) => {
-    const plan = buildPlan(vendor, planType, requirements, input, catalog, createCtx(), steps);
+    const planSteps = planType === 'HP' ? { ...steps, cePicks } : steps;
+    const plan = buildPlan(vendor, planType, requirements, input, catalog, createCtx(), planSteps);
+    if (planType === 'CE') cePicks = collectCePicks(plan, vendor.name, catalog);
     return assemblePlan(toPublicPlan(plan), { reqs: requirements, input, catalog, sharedLedger });
   });
 }

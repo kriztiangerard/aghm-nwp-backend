@@ -8,7 +8,7 @@
 
 const STATIC_LIMITATIONS = Object.freeze([
   'Planning stage only: this output supports early network planning. It is not a site survey or a professional installation design, and final hardware selection, procurement and installation remain the responsibility of qualified network professionals and the deploying organization.',
-  'The Bill of Materials covers major network equipment only (gateways/routers, switches, wireless access points, controllers, firewalls, and racks or enclosures). It excludes cabling, cable accessories and other minor installation materials, and actual quantities must be determined through a physical site survey and detailed deployment planning.',
+  'The Bill of Materials covers major network equipment only (gateways/routers, switches, wireless access points, controllers where applicable, and racks or enclosures). Firewall functions are provided by the gateway and appear as a logical node in the topology. No separate firewall appliance is included or priced. It excludes cabling, cable accessories and other minor installation materials, and actual quantities must be determined through a physical site survey and detailed deployment planning.',
   'The topology is a logical design only. It does not include IP addressing, rack elevations, wireless coverage analysis, cable routing or network simulation.',
   'Prices are planning estimates based on the product catalog at the time the plan was generated. Actual prices may vary due to taxes, shipping, installation fees, promotions and product availability, so confirm current pricing and availability with the distributor before purchasing.',
 ]);
@@ -21,6 +21,9 @@ const ASSUMED_LAYOUT_NOTICE =
 
 const GENERIC_ENCLOSURE_NOTICE =
   'The rack or cabinet in the Bill of Materials is a generic size. Any rack or wall cabinet model with at least that capacity (in rack units) can be used.';
+
+const SINGLE_ENCLOSURE_NOTICE =
+  'One rack or cabinet is sized on the total rack units of the equipment in the whole building. If switches are installed in separate floor network closets, each closet may need its own enclosure; confirm this through a site survey.';
 
 const UNKNOWN_OTHER_DEVICES_NOTICE =
   'The number of other devices was not provided, so they are drawn as one group without a count.';
@@ -83,6 +86,11 @@ function buildLimitations(plan, input, ledger = []) {
 
   if (bomLines.some((line) => line.category === 'enclosure' && line.isGeneric === true)) {
     lines.push(GENERIC_ENCLOSURE_NOTICE);
+  }
+
+  // NWP-ENGINE-019 AC10: closets are not counted, so say what the single enclosure covers.
+  if (input.floors > 1 && bomLines.some((line) => line.category === 'enclosure')) {
+    lines.push(SINGLE_ENCLOSURE_NOTICE);
   }
 
   return [...new Set(lines)];

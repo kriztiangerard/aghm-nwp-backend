@@ -339,6 +339,13 @@ function addSingleHomingLimitation(ctx) {
   return ctx.flags;
 }
 
+// NWP-ENGINE-019 AC2: the Cost-Efficient picks arrive as {accessSwitches: [{floor, sku}], coreSwitch}.
+// A missing floor or core must resolve to "no pick", never to the container object itself.
+function isCategoryPicks(cePick) {
+  return Boolean(cePick) &&
+    (Array.isArray(cePick.accessSwitches) || Object.hasOwn(cePick, 'coreSwitch'));
+}
+
 function selectCoreSwitch({
   catalog,
   vendor,
@@ -438,11 +445,9 @@ function selectCoreSwitch({
     );
   }
 
-  const coreCePick =
-    cePick?.coreSwitch?.sku ??
-    cePick?.coreSwitch ??
-    cePick?.sku ??
-    cePick;
+  const coreCePick = isCategoryPicks(cePick)
+    ? cePick.coreSwitch?.sku ?? cePick.coreSwitch ?? undefined
+    : cePick?.sku ?? cePick;
 
   const result = selectSku({
     pool,
@@ -589,7 +594,7 @@ function selectSwitches({
         ? requiredPoeStandard
         : 'af';
 
-    const predicate = switchSku =>
+    const minimumQuantity = switchSku =>
       getMinimumIdenticalSwitchQuantity({
         switchSku,
         requiredPorts: floor.requiredPorts,
@@ -597,13 +602,21 @@ function selectSwitches({
         requiredPoeBudgetW: budget.budgetW,
         requiredPoeStandard: floorPoeStandard,
         requiredUplinks: accessUplinks,
-      }) !== null;
+      });
 
-    const ceFloorPick =
-      cePick?.accessSwitches?.[index]?.sku ??
-      cePick?.[index]?.sku ??
-      cePick?.sku ??
-      cePick;
+    const predicate = switchSku => minimumQuantity(switchSku) !== null;
+
+    // NWP-ENGINE-019 AC5: on a single floor there is no separate core, so the access group also serves as
+    // the core. A required redundant core therefore means at least two units of it.
+    const unitsFloor = floorCount === 1 && redundancyRequired ? coreSwitchQuantity : 1;
+    const quantityFor = switchSku => Math.max(unitsFloor, minimumQuantity(switchSku));
+
+    // NWP-ENGINE-019 AC1: rank by unit price x required quantity, in centavos to avoid rounding drift.
+    const costOf = switchSku => Math.round(switchSku.price * 100) * quantityFor(switchSku);
+
+    const ceFloorPick = isCategoryPicks(cePick)
+      ? cePick.accessSwitches?.find(item => item.floor === floor.floor)?.sku
+      : cePick?.[index]?.sku ?? cePick?.sku ?? cePick;
 
     const result = selectSku({
       pool: switchPool,
@@ -614,20 +627,14 @@ function selectSwitches({
       ctx,
       qty: 1,
       cePick: plan === 'HP' ? ceFloorPick : undefined,
+      costOf,
     });
 
     if (!result.ok) {
       return result;
     }
 
-    const quantity = getMinimumIdenticalSwitchQuantity({
-      switchSku: result.sku,
-      requiredPorts: floor.requiredPorts,
-      requiredPoePorts: floor.requiredPoePorts,
-      requiredPoeBudgetW: budget.budgetW,
-      requiredPoeStandard: floorPoeStandard,
-      requiredUplinks: accessUplinks,
-    });
+    const quantity = quantityFor(result.sku);
 
     accessSwitches.push({
       floor: floor.floor,

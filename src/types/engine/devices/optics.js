@@ -22,7 +22,8 @@ const BACKBONE_VALUES = new Set(['fiber', 'copper']);                 // values 
 const SFP_FORM_FACTORS = new Set(['SFP', 'SFP+', 'SFP28', 'QSFP+', 'QSFP28']); // ERD sfpFormFactor enum
 
 // ---------------------------------------------------------------------------
-// SUBTASK 1 — Count fiber links: floors × (redundancy === 'required' ? 2 : 1).
+// SUBTASK 1 — Count fiber links when there are no switch uplinks to count (single floor with existing
+// fiber, or no switches selected): floors × (redundancy === 'required' ? 2 : 1).
 // One uplink per floor; a second path per floor when redundancy is 'required'.
 // 'backupWan' is WAN-side only and must not add backbone links.
 // Invalid floors or redundancy throw ValidationError (no silent default).
@@ -74,7 +75,18 @@ function resolveFormFactor(sw, ctx) {
   return sw.sfp_form_factor;
 }
 
-function planOptics(input, reqs, sw, ctx) {
+// NWP-ENGINE-019 AC7: with a core, every access switch unit has its own uplink(s), so the links are
+// counted per switch. This matches the core port sizing and the topology's fiber edges per core path.
+// Returns null when there are no switch uplinks to count (single floor, or no switches selected).
+function countUplinkLinks(switching) {
+  const links = (switching?.accessSwitches ?? []).reduce(
+    (total, accessSwitch) => total + accessSwitch.qty * (accessSwitch.uplinksPerSwitch ?? 0),
+    0
+  );
+  return links > 0 ? links : null;
+}
+
+function planOptics(input, reqs, sw, ctx, switching) {
   // -------------------------------------------------------------------------
   // SUBTASK 4 — Return null for a copper backbone; throw on an unrecognised value
   // so an upstream typo cannot silently drop the optics.
@@ -86,7 +98,8 @@ function planOptics(input, reqs, sw, ctx) {
     return null;
   }
 
-  const links = countFiberLinks(input.floors, reqs.redundancy);   // SUBTASK 1
+  const floorLinks = countFiberLinks(input.floors, reqs.redundancy); // SUBTASK 1
+  const links = countUplinkLinks(switching) ?? floorLinks;
   const modules = countOpticModules(links);                       // SUBTASK 2
   const formFactor = resolveFormFactor(sw, ctx);                  // SUBTASK 3
 
@@ -115,4 +128,4 @@ function planOptics(input, reqs, sw, ctx) {
   return { links, modules, formFactor };
 }
 
-module.exports = { planOptics, countFiberLinks, countOpticModules, resolveFormFactor };
+module.exports = { planOptics, countUplinkLinks, countFiberLinks, countOpticModules, resolveFormFactor };

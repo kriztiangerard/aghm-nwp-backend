@@ -77,13 +77,25 @@ function compareByPriceThenSku(a, b) {
 }
 
 /**
+ * NWP-ENGINE-019 AC1: order by total cost (what it takes to meet the requirement with this model),
+ * then unit price, then SKU id. Without costOf this is exactly compareByPriceThenSku.
+ * @param {((sku: Object) => number)=} costOf  total cost of the quantity this model would need
+ */
+function comparatorFor(costOf) {
+    if (costOf === undefined) return compareByPriceThenSku;
+    return (a, b) => costOf(a) - costOf(b) || compareByPriceThenSku(a, b);
+}
+
+/**
  * Subtask 6. Cheapest priced SKU. Pure: does not mutate the input, returns null if empty.
  * Expects a pool that already went through excludeUnpriced.
  * @param {Array<{sku: string, price: number}>} pricedPool
+ * @param {((sku: Object) => number)=} costOf
  */
-function cheapestSku(pricedPool) {
+function cheapestSku(pricedPool, costOf) {
     if (pricedPool.length === 0) return null;
-    return pricedPool.reduce((best, sku) => (compareByPriceThenSku(sku, best) < 0 ? sku : best));
+    const compare = comparatorFor(costOf);
+    return pricedPool.reduce((best, sku) => (compare(sku, best) < 0 ? sku : best));
 }
 
 /**
@@ -105,18 +117,18 @@ function cheapestSku(pricedPool) {
  * @param {Array} priced  priced, qualifying SKUs (non-empty)
  * @param {{line_rank?: number}} base  the Cost-Efficient pick
  */
-function pickHighPerformance(priced, base) {
+function pickHighPerformance(priced, base, costOf) {
     const baseRank = base.line_rank;
-    if (!Number.isFinite(baseRank)) return cheapestSku(priced);
+    if (!Number.isFinite(baseRank)) return cheapestSku(priced, costOf);
 
     const above = priced.filter((sku) => Number.isFinite(sku.line_rank) && sku.line_rank > baseRank);
     if (above.length > 0) {
         const nextRank = Math.min(...above.map((sku) => sku.line_rank));
-        return cheapestSku(above.filter((sku) => sku.line_rank === nextRank));
+        return cheapestSku(above.filter((sku) => sku.line_rank === nextRank), costOf);
     }
 
     const sameLine = priced.filter((sku) => sku.line_rank === baseRank);
-    return cheapestSku(sameLine.length > 0 ? sameLine : priced);
+    return cheapestSku(sameLine.length > 0 ? sameLine : priced, costOf);
 }
 
 /**
@@ -148,9 +160,11 @@ function unmetResult(ctx, category, vendor, reason) {
  *                                   this category and vendor. Needed whenever the two plans use different
  *                                   predicates (e.g. different VPN tunnel or AP counts). If omitted, the
  *                                   cheapest SKU of this call's own pool stands in for it.
+ * @param {(sku: Object) => number} [args.costOf]  total cost of using this model, when the quantity depends
+ *                                   on the model (access switches). Omitted: models are ranked by unit price.
  * @returns {import('./contracts').SelectionResult}
  */
-function selectSku({ pool, predicate, plan, category, vendor, ctx, qty = 1, cePick }) {
+function selectSku({ pool, predicate, plan, category, vendor, ctx, qty = 1, cePick, costOf }) {
     // Programmer errors throw. A requirement that cannot be met returns UNMET instead.
     if (!PLANS.has(plan)) {
         throw new Error(`selectSku: unknown plan '${plan}'`);
@@ -192,9 +206,9 @@ function selectSku({ pool, predicate, plan, category, vendor, ctx, qty = 1, cePi
     // Subtask 7: High-Performance = step up from the Cost-Efficient pick (see pickHighPerformance).
     let pick;
     if (plan === 'cost_efficient') {
-        pick = cheapestSku(priced);
+        pick = cheapestSku(priced, costOf);
     } else {
-        pick = pickHighPerformance(priced, cePick || cheapestSku(priced));
+        pick = pickHighPerformance(priced, cePick || cheapestSku(priced, costOf), costOf);
     }
 
     return { ok: true, sku: pick, qty, flags };
