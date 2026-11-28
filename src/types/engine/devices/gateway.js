@@ -6,50 +6,14 @@
 // Rules: pure function (no I/O), constants from params.js, assumptions via ctx.
 
 const { selectSku } = require('../select.js');
-const { addFlag, addLedger } = require('../ctx.js');
+const { addFlag, addLedger, createCtx } = require('../ctx.js');
 
-function selectGateway({ catalog, vendor, requirements, plan, cePick, ctx }) {
-  if (plan !== 'cost_efficient' && plan !== 'high_performance') {
-    throw new Error(`selectGateway: unknown plan '${plan}'`);
-  }
-
-  const planKey = plan === 'cost_efficient' ? 'CE' : 'HP';
-  const vpnTunnelsNeeded = requirements.vpnTunnelsNeeded?.[planKey] ?? 0;
+// One selection pass. vpnTunnelsNeeded is 0 when VPN is not being required.
+function selectGatewayPass({ catalog, vendor, requirements, plan, cePick, ctx, vpnTunnelsNeeded }) {
 
   const pool = catalog.filter(
     (sku) => sku.vendor === vendor && sku.category === 'gateway'
   );
-
-  const hasKnownSufficientTunnelCapacity = pool.some(
-    (sku) =>
-      ['ACTIVE', 'SUNSETTING'].includes(sku.status) &&
-      sku.site_to_site_vpn === true &&
-      typeof sku.price === 'number' &&
-      Number.isFinite(sku.price) &&
-      Number.isFinite(sku.max_vpn_tunnels) &&
-      sku.max_vpn_tunnels >= vpnTunnelsNeeded
-  );
-
-  const missingTunnelCapacity =
-    vpnTunnelsNeeded > 0 &&
-    !hasKnownSufficientTunnelCapacity &&
-    pool.some(
-      (sku) =>
-        ['ACTIVE', 'SUNSETTING'].includes(sku.status) &&
-        sku.site_to_site_vpn === true &&
-        typeof sku.price === 'number' &&
-        Number.isFinite(sku.price) &&
-        (sku.max_vpn_tunnels === undefined ||
-          sku.max_vpn_tunnels === null)
-    );
-
-  if (missingTunnelCapacity) {
-    addFlag(
-      ctx,
-      'GATEWAY_VPN_CAPACITY_UNKNOWN',
-      `Some ${vendor} gateways have unknown max_vpn_tunnels; unknown capacity is not assumed to satisfy the requirement`
-    );
-  }
 
   const requiredMbps = requirements.requiredMbps;
   const throughputMetric = requirements.throughputMetric;
@@ -99,12 +63,12 @@ function selectGateway({ catalog, vendor, requirements, plan, cePick, ctx }) {
   }
 
   const predicate = (sku) => {
+    // NWP-ENGINE-019 AC13: VPN support is required. The tunnel limit is checked only when it is known.
     if (
       vpnTunnelsNeeded > 0 &&
-      !(
-        sku.site_to_site_vpn === true &&
-        Number.isFinite(sku.max_vpn_tunnels) &&
-        sku.max_vpn_tunnels >= vpnTunnelsNeeded
+      (
+        sku.site_to_site_vpn !== true ||
+        (Number.isFinite(sku.max_vpn_tunnels) && sku.max_vpn_tunnels < vpnTunnelsNeeded)
       )
     ) {
       return false;
@@ -256,6 +220,65 @@ function selectGateway({ catalog, vendor, requirements, plan, cePick, ctx }) {
   );
 
   return selectForTier(pool);
+}
+
+// Keeps what a selection pass recorded, without repeating an entry the plan already has.
+function keepRecords(ctx, pass) {
+  for (const key of ['ledger', 'flags', 'unmet']) {
+    if (pass[key].length > 0) (ctx[key] ??= []).push(...pass[key]);
+  }
+}
+
+function selectGateway(args) {
+  const { vendor, requirements, plan, ctx } = args;
+
+  if (plan !== 'cost_efficient' && plan !== 'high_performance') {
+    throw new Error(`selectGateway: unknown plan '${plan}'`);
+  }
+
+  const planKey = plan === 'cost_efficient' ? 'CE' : 'HP';
+  const vpnTunnelsNeeded = requirements.vpnTunnelsNeeded?.[planKey] ?? 0;
+
+  if (vpnTunnelsNeeded <= 0) {
+    return selectGatewayPass({ ...args, vpnTunnelsNeeded: 0 });
+  }
+
+  const withVpn = createCtx();
+  const result = selectGatewayPass({ ...args, ctx: withVpn, vpnTunnelsNeeded });
+
+  if (result.ok) {
+    keepRecords(ctx, withVpn);
+    if (!Number.isFinite(result.sku.max_vpn_tunnels)) {
+      addFlag(
+        ctx,
+        'GATEWAY_VPN_CAPACITY_UNKNOWN',
+        `${result.sku.sku} supports site-to-site VPN, but its tunnel limit is not in the catalog; confirm it supports at least ${vpnTunnelsNeeded} tunnel(s) before purchase.`
+      );
+    }
+    return result;
+  }
+
+  // No gateway can meet the VPN need. A gateway is still recommended, and VPN is recorded as unmet.
+  const withoutVpn = createCtx();
+  const fallback = selectGatewayPass({ ...args, ctx: withoutVpn, vpnTunnelsNeeded: 0 });
+
+  if (!fallback.ok) {
+    keepRecords(ctx, withVpn);
+    return result;
+  }
+
+  keepRecords(ctx, withoutVpn);
+
+  return {
+    ...fallback,
+    vpnUnmet: {
+      category: 'gateway',
+      vendor,
+      reason:
+        `Site-to-site VPN (${vpnTunnelsNeeded} tunnel(s)) is not met: no purchasable ${vendor} gateway with enough VPN support ` +
+        `meets the other requirements. ${fallback.sku.sku} is shown without it`,
+    },
+  };
 }
 
 module.exports = { selectGateway };

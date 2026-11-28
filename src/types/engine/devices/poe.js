@@ -90,10 +90,18 @@ function computePoeBudget({ requirements, apSelection, plan, ctx }) {
     return { perFloor: [], apDrawW };
   }
 
-  const otherLoadPerFloor = otherLoadW / floorCount;
+  // NWP-ENGINE-019 AC14: other PoE devices are split as whole devices, in the same way as switch PoE ports
+  // (earlier floors take the remainder). Without a device count, the watts are split evenly.
+  const deviceCount = requirements.poeEdgePorts;
+  const otherLoadForFloor = index => {
+    if (!Number.isInteger(deviceCount) || deviceCount <= 0) return otherLoadW / floorCount;
+    const devicesOnFloor =
+      Math.floor(deviceCount / floorCount) + (index < deviceCount % floorCount ? 1 : 0);
+    return (otherLoadW * devicesOnFloor) / deviceCount;
+  };
 
-  const perFloor = apCounts.map(apCount => {
-    const loadW = otherLoadPerFloor + apCount * apDrawW;
+  const perFloor = apCounts.map((apCount, index) => {
+    const loadW = otherLoadForFloor(index) + apCount * apDrawW;
     const budgetW = Number((loadW * headroom).toFixed(2));
 
     return { loadW, budgetW };

@@ -1883,9 +1883,9 @@ test('Omada snapshot and vendor 999 fixtures exercise the complete orchestration
   assert.ok(
     missingNullableFieldRun.plans.every((plan) =>
       plan.flags.some((flag) => flag.code === 'GATEWAY_VPN_CAPACITY_UNKNOWN') &&
-      plan.unmet.some((item) => item.category === 'gateway'),
+      !plan.unmet.some((item) => item.category === 'gateway'),
     ),
-    'missing max_vpn_tunnels should produce the normal flag and unmet results without throwing',
+    'missing max_vpn_tunnels should select a VPN gateway and flag it for confirmation without throwing',
   );
   const sunsettingSyntheticAp = normalizedSyntheticCatalog.find(
     (sku) => sku.sku === 'SYN-AP-005',

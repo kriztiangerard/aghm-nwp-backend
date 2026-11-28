@@ -31,6 +31,7 @@ function makeSku(
       wifi_standard: wifiStandard,
       supported_6ghz: supported6Ghz,
       max_power_draw_w: maxPowerDrawW,
+      poe_standard: 'at',
     },
   };
 }
@@ -286,9 +287,10 @@ test('returns an unmet result when both 6E and Wi-Fi 6 selection fail', () => {
   );
 });
 
-test('returns null for max power draw when the selected AP has no value', () => {
+test('skips and names an AP that has no power draw value', () => {
   const ap6E = makeSku('AP-6E', 6, true, null);
   const selector = makeSelector([ap6E]);
+  const ctx = createCtx();
 
   const result = selectAccessPoints({
     catalog: [ap6E],
@@ -302,11 +304,13 @@ test('returns null for max power draw when the selected AP has no value', () => 
     },
     requirements: makeRequirements('6E', 3, 4),
     plan: 'CE',
-    ctx: createCtx(),
+    ctx,
     selectSku: selector.selectSku,
     wirelessRequirementsFn: () => makeRequirements('6E', 3, 4).wireless,
   });
 
-  assert.equal(result.ok, true);
-  assert.equal(result.maxPowerDrawW, null);
+  assert.equal(result.ok, false);
+  assert.ok(ctx.flags.some(
+    (flag) => flag.code === 'AP_DATA_INCOMPLETE' && flag.message.includes('AP-6E')
+  ));
 });

@@ -32,7 +32,7 @@ test('run normalizes questionnaire answers, derives requirements, and invokes or
   assert.equal(loadOptions.now, now);
   assert.equal(result.requirements.wireless.CE.total > 0, true);
   assert.equal(result.requirements.vpnTunnelsNeeded.CE, 0);
-  assert.equal(result.requirements.vpnTunnelsNeeded.HP, 2);
+  assert.equal(result.requirements.vpnTunnelsNeeded.HP, 1); // one site plus one planned site is one link
   assert.equal(result.plans.length, 2);
   assert.deepEqual(result.plans.map(({ planType }) => planType), ['CE', 'HP']);
   assert.equal(validateEngineResult(finalizeEngineResult(result, new Date().toISOString())), true);

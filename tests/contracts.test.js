@@ -119,7 +119,7 @@ const validRequirements = () => ({
     CE: { total: 4, perFloor: [2, 2] },
     HP: { total: 6, perFloor: [3, 3] },
   },
-  backbone: '1G',
+  backbone: 'fiber',
   edgePorts: 30,
   poeEdgePorts: 10,
   otherPoeLoadW: 0,
@@ -213,6 +213,7 @@ test('validateSelectionResult rejects an unmet result without a reason and names
 
 const validGateway = () => ({
   sku: 'SYN-GW-001',
+  name: 'Synthetic Gateway',
   vendor: 'synthetic',
   category: 'gateway',
   line: 'Synthetic Gateway Entry',
@@ -252,6 +253,6 @@ test('validateCatalogSku rejects a SKU without status and names it', () => {
 });
 
 test('validateCatalogSku does not require a product line for an optic', () => {
-  const optic = { sku: 'OPT-1', vendor: 'synthetic', category: 'optic', status: 'ACTIVE', price: 900, currency: 'PHP' };
+  const optic = { sku: 'OPT-1', name: 'Synthetic Optic', vendor: 'synthetic', category: 'optic', status: 'ACTIVE', price: 900, currency: 'PHP' };
   assert.equal(validateCatalogSku(optic), true);
 });

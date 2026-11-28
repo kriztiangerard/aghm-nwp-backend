@@ -67,7 +67,8 @@ function deriveConnectivityRequirements(input, networkRequirements, ctx) {
       'High-Performance plan allows for VPN tunnels for 2 or more new sites; the CE plan has no VPN tunnel requirement.'
     );
   } else if (locations === 'one' && newSites === 1) {
-    vpnTunnelsNeeded.HP = 2;
+    // NWP-ENGINE-019 AC13: one site plus one planned site is one link.
+    vpnTunnelsNeeded.HP = 1;
   }
 
   let requiredMbps;
